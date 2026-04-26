@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from buddy import __version__
+from buddy.api import agent as agent_api
 from buddy.api import capture as capture_api
 from buddy.api import conversations as conversations_api
 from buddy.api import converse as converse_api
@@ -18,6 +19,7 @@ from buddy.api import goals as goals_api
 from buddy.api import grade as grade_api
 from buddy.api import health as health_api
 from buddy.api import intake as intake_api
+from buddy.api import interventions as interventions_api
 from buddy.api import journal as journal_api
 from buddy.api import memory as memory_api
 from buddy.api import progress as progress_api
@@ -75,6 +77,9 @@ def create_app() -> FastAPI:
     # Phase 3 routes.
     app.include_router(capture_api.router)
     app.include_router(focus_api.router)
+    # Phase 4 routes.
+    app.include_router(agent_api.router)
+    app.include_router(interventions_api.router)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(_: Request, exc: StarletteHTTPException):

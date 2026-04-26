@@ -18,6 +18,7 @@ from buddy.memory.index import reconcile_index
 from buddy.memory.store import MemoryStore
 from buddy.services.budget import cap_status
 from buddy.services.grading import compute_day_grade, upsert_day_grade
+from buddy.services.interventions import run_engine_tick, run_floor_check
 
 log = get_logger("buddy.scheduler")
 _scheduler: AsyncIOScheduler | None = None
@@ -65,6 +66,29 @@ async def _day_grade_precompute_job() -> None:
     )
 
 
+async def _intervention_engine_tick_job() -> None:
+    """Drift detection + tier escalation, every 30 seconds."""
+    factory = get_session_factory()
+    async with factory() as db:
+        result = await run_engine_tick(db)
+    if result.drift_fired or result.floor_fired:
+        log.info(
+            "scheduler.engine_tick",
+            drift=len(result.drift_fired),
+            floor=len(result.floor_fired),
+        )
+
+
+async def _floor_check_job() -> None:
+    """Daily floor-check: any active goal with no progress today gets a
+    Tier 0 nudge. Runs at the user's configured end-of-day hour."""
+    factory = get_session_factory()
+    async with factory() as db:
+        fired = await run_floor_check(db)
+    if fired:
+        log.info("scheduler.floor_check", fired=len(fired))
+
+
 def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -104,6 +128,22 @@ def start_scheduler() -> AsyncIOScheduler:
             timezone=settings.timezone,
         ),
         id="day_grade_precompute",
+        replace_existing=True,
+    )
+    sched.add_job(
+        _intervention_engine_tick_job,
+        IntervalTrigger(seconds=30),
+        id="intervention_engine_tick",
+        replace_existing=True,
+    )
+    sched.add_job(
+        _floor_check_job,
+        CronTrigger(
+            hour=settings.end_of_day_hour,
+            minute=(settings.end_of_day_minute + 1) % 60,
+            timezone=settings.timezone,
+        ),
+        id="floor_check",
         replace_existing=True,
     )
 
