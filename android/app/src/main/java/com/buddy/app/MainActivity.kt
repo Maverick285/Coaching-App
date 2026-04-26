@@ -9,21 +9,30 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.buddy.app.ui.AppNavGraph
+import com.buddy.app.ui.Routes
 import com.buddy.app.ui.theme.BuddyTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { BuddyApp() }
+        val deeplink = intent?.getStringExtra("deeplink")
+        val start = when (deeplink) {
+            "goals" -> Routes.GOALS
+            "grade" -> Routes.GRADE
+            "journal" -> Routes.JOURNAL
+            "chat" -> Routes.CHAT
+            else -> Routes.CHAT
+        }
+        setContent { BuddyApp(startRoute = start) }
     }
 }
 
 @Composable
-private fun BuddyApp() {
+private fun BuddyApp(startRoute: String) {
     BuddyTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-            AppNavGraph()
+            AppNavGraph(startRoute = startRoute)
         }
     }
 }

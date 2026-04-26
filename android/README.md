@@ -1,14 +1,23 @@
-# Buddy — Android client (Phase 1)
+# Buddy — Android client (Phases 1 + 2)
 
-Kotlin + Jetpack Compose. Talks to the Phase 0 backend over HTTPS.
+Kotlin + Jetpack Compose. Talks to the Phase 0/2 backend over HTTPS.
 
 ## What's in Phase 1
 
 - **Chat screen** with message scrollback, persistent session id (resumes from server-side history on relaunch), and a sending indicator while the assistant is replying.
-- **Voice input** via Android's `SpeechRecognizer` — hold the mic button on the composer to dictate; release to submit. Works offline if the device has offline recognition installed; otherwise online.
-- **Settings screen** for backend URL + bearer token + a "Test connection" button that hits `/health` and reports the resolved models.
-- **Dark Material 3 theme**, edge-to-edge layout.
-- **DataStore Preferences** persists the URL, token, and current session id across launches.
+- **Voice input** via Android's `SpeechRecognizer` — hold the mic button on the composer to dictate; release to submit.
+- **Settings screen** for backend URL + bearer token + "Test connection".
+- **Dark Material 3 theme**, edge-to-edge.
+- **DataStore Preferences** persists URL, token, and session id.
+
+## What's added in Phase 2
+
+- **Bottom navigation** — Chat / Goals / Grade / Journal.
+- **Goals**: list with priority + state badges, add dialog with statement + pace target + MVP threshold, detail screen showing today's progress vs. par, sub-tasks (check to mark done), implementation intentions, "Log progress" and "+ Task" actions.
+- **Grade**: today's par-1 score with system explanation, accept/adjust controls, per-goal breakdown, 28-day streak strip (gray = pause, red = zero, blue = ≥ par 1.0), weekly review section that calls the reasoning-tier `/weekly-review` and shows pattern observations + suggestions.
+- **Journal**: today's entry editor with optional mood, plus the last ~20 days as cards.
+- **AlarmManager** — morning check-in and end-of-day grade prompts. Times configurable in Settings; on first save the app pulls server defaults from `/health`'s `daily_rhythm` block. Reschedules on boot via a registered `BootReceiver`. Tapping the notification deep-links to Goals (morning) or Grade (end of day).
+- **Notification permission** requested on Android 13+ when the user enables the alarm toggle.
 
 The backend is Phase 0 (the `src/buddy` Python service). The Android app does not duplicate any backend logic — every message round-trip is one `POST /converse` call.
 

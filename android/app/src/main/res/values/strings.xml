@@ -24,4 +24,9 @@
     <string name="msg_record_audio_required">Microphone permission is required for voice input.</string>
     <string name="msg_connection_ok">Connection OK · models: %1$s</string>
     <string name="msg_connection_failed">Connection failed: %1$s</string>
+
+    <string name="label_morning_time">Morning check-in</string>
+    <string name="label_eod_time">End-of-day grade</string>
+    <string name="label_alarms_enabled">Daily prompts</string>
+    <string name="msg_notifications_required">Allow notifications to receive morning and end-of-day prompts.</string>
 </resources>

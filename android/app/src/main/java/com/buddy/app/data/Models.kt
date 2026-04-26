@@ -6,12 +6,22 @@ import kotlinx.serialization.Serializable
 // --- Health -----------------------------------------------------------------
 
 @Serializable
+data class DailyRhythm(
+    val timezone: String,
+    @SerialName("morning_hour") val morningHour: Int,
+    @SerialName("morning_minute") val morningMinute: Int,
+    @SerialName("end_of_day_hour") val endOfDayHour: Int,
+    @SerialName("end_of_day_minute") val endOfDayMinute: Int,
+)
+
+@Serializable
 data class HealthResponse(
     val status: String,
     val version: String,
     @SerialName("db_connected") val dbConnected: Boolean,
     @SerialName("memory_repo_status") val memoryRepoStatus: String,
     @SerialName("models_resolved") val modelsResolved: Map<String, String>,
+    @SerialName("daily_rhythm") val dailyRhythm: DailyRhythm? = null,
 )
 
 // --- Converse ---------------------------------------------------------------
