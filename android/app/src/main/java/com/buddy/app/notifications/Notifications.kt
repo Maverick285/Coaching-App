@@ -15,11 +15,15 @@ object Notifications {
     const val CHANNEL_DAILY = "daily_rhythm"
     const val CHANNEL_FOCUS = "focus_session"
     const val CHANNEL_FOCUS_CHECKIN = "focus_check_in"
+    const val CHANNEL_INTERVENTION_T0 = "intervention_tier0"
+    const val CHANNEL_INTERVENTION_T1 = "intervention_tier1"
+    const val CHANNEL_INTERVENTION_T2 = "intervention_tier2"
 
     const val NOTIF_ID_MORNING = 100
     const val NOTIF_ID_EOD = 101
     const val NOTIF_ID_FOCUS = 200          // persistent during a session
     const val NOTIF_ID_FOCUS_CHECKIN = 201  // each check-in toast
+    const val NOTIF_ID_INTERVENTION_BASE = 300  // + intervention.id
 
     fun ensureChannel(context: Context) {
         // minSdk = 28, so Build.VERSION_CODES.O is always available.
@@ -56,6 +60,39 @@ object Notifications {
                     description = "Mid-session check-in messages from your coach."
                 }
                 mgr.createNotificationChannel(channel)
+            }
+            if (mgr.getNotificationChannel(CHANNEL_INTERVENTION_T0) == null) {
+                mgr.createNotificationChannel(
+                    NotificationChannel(
+                        CHANNEL_INTERVENTION_T0,
+                        "Drift nudge (soft)",
+                        NotificationManager.IMPORTANCE_LOW,
+                    ).apply {
+                        description = "Tier 0 — quiet drift nudge during focus sessions."
+                    }
+                )
+            }
+            if (mgr.getNotificationChannel(CHANNEL_INTERVENTION_T1) == null) {
+                mgr.createNotificationChannel(
+                    NotificationChannel(
+                        CHANNEL_INTERVENTION_T1,
+                        "Drift nudge (direct)",
+                        NotificationManager.IMPORTANCE_DEFAULT,
+                    ).apply {
+                        description = "Tier 1 — more direct nudge if Tier 0 was ignored."
+                    }
+                )
+            }
+            if (mgr.getNotificationChannel(CHANNEL_INTERVENTION_T2) == null) {
+                mgr.createNotificationChannel(
+                    NotificationChannel(
+                        CHANNEL_INTERVENTION_T2,
+                        "Drift nudge (persistent)",
+                        NotificationManager.IMPORTANCE_HIGH,
+                    ).apply {
+                        description = "Tier 2 — audible, persistent until acknowledged."
+                    }
+                )
             }
         }
     }

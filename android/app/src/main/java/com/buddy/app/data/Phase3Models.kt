@@ -108,3 +108,44 @@ data class FocusSessionDetail(
     val session: FocusSession,
     @SerialName("check_ins") val checkIns: List<FocusCheckIn> = emptyList(),
 )
+
+// --- Phase 4: agent reports + interventions -------------------------------
+
+@Serializable
+data class AgentHeartbeat(
+    val source: String = "phone_usage_stats",
+    @SerialName("foreground_category") val foregroundCategory: String,
+    @SerialName("foreground_app_hint") val foregroundAppHint: String = "",
+    @SerialName("idle_seconds") val idleSeconds: Int = 0,
+    @SerialName("active_seconds") val activeSeconds: Int = 0,
+)
+
+@Serializable
+data class AgentHeartbeatResponse(
+    val received: Boolean,
+    @SerialName("active_session_id") val activeSessionId: Int? = null,
+    @SerialName("interventions_pending") val interventionsPending: Int = 0,
+    @SerialName("drift_flagged") val driftFlagged: Boolean = false,
+)
+
+@Serializable
+data class Intervention(
+    val id: Int,
+    @SerialName("session_id") val sessionId: Int? = null,
+    @SerialName("goal_id") val goalId: Int? = null,
+    val tier: Int,
+    @SerialName("fired_at") val firedAt: String,
+    @SerialName("delivered_at") val deliveredAt: String? = null,
+    @SerialName("dismissed_at") val dismissedAt: String? = null,
+    @SerialName("next_escalation_at") val nextEscalationAt: String? = null,
+    val reason: String,
+    val message: String,
+)
+
+@Serializable
+data class InterventionsPendingResponse(
+    val interventions: List<Intervention> = emptyList(),
+)
+
+@Serializable
+data class InterventionAction(val action: String)

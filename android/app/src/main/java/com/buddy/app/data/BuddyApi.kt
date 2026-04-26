@@ -134,4 +134,18 @@ interface BuddyApi {
 
     @GET("/focus/recent")
     suspend fun recentFocus(@Query("limit") limit: Int = 20): List<FocusSession>
+
+    // --- Phase 4: agent reports + interventions ---------------------------
+
+    @POST("/agent/heartbeat")
+    suspend fun agentHeartbeat(@Body req: AgentHeartbeat): AgentHeartbeatResponse
+
+    @GET("/interventions/pending")
+    suspend fun pendingInterventions(): InterventionsPendingResponse
+
+    @POST("/interventions/{id}/action")
+    suspend fun interventionAction(
+        @Path("id") id: Int,
+        @Body req: InterventionAction,
+    ): Intervention
 }

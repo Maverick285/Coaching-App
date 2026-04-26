@@ -9,9 +9,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.buddy.app.MainActivity
 import com.buddy.app.R
+import com.buddy.app.data.AgentHeartbeat
 import com.buddy.app.data.ApiClient
 import com.buddy.app.data.BuddyApi
 import com.buddy.app.data.SettingsRepository
+import com.buddy.app.interventions.InterventionRenderer
+import com.buddy.app.interventions.PhoneCategorizer
+import com.buddy.app.interventions.UsageStatsReader
 import com.buddy.app.notifications.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +49,9 @@ class FocusSessionService : Service() {
     private var plannedMinutes: Int = 45
     private var checkInJob: Job? = null
     private var refreshJob: Job? = null
+    private var heartbeatJob: Job? = null
+    private var pollJob: Job? = null
+    private val seenInterventions = mutableSetOf<Int>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -98,11 +105,37 @@ class FocusSessionService : Service() {
                 fireCheckIn(kind)
             }
         }
+
+        // Phase 4: heartbeat the phone-side foreground category every 15s
+        // and poll for pending interventions every 20s.
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            var lastReportMs = System.currentTimeMillis()
+            while (true) {
+                delay(15_000)
+                if (remainingMinutes() <= 0) return@launch
+                val now = System.currentTimeMillis()
+                val activeSeconds = ((now - lastReportMs) / 1000L).toInt()
+                lastReportMs = now
+                sendHeartbeat(activeSeconds)
+            }
+        }
+
+        pollJob?.cancel()
+        pollJob = scope.launch {
+            while (true) {
+                delay(20_000)
+                if (remainingMinutes() <= 0) return@launch
+                pollPendingInterventions()
+            }
+        }
     }
 
     private fun handleStop() {
         refreshJob?.cancel()
         checkInJob?.cancel()
+        heartbeatJob?.cancel()
+        pollJob?.cancel()
         // minSdk = 28 ≥ N, so STOP_FOREGROUND_REMOVE is always available.
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -111,6 +144,8 @@ class FocusSessionService : Service() {
     override fun onDestroy() {
         refreshJob?.cancel()
         checkInJob?.cancel()
+        heartbeatJob?.cancel()
+        pollJob?.cancel()
         scope.coroutineContext[Job]?.cancel()
         super.onDestroy()
     }
@@ -201,6 +236,46 @@ class FocusSessionService : Service() {
     private suspend fun buildApi(): BuddyApi? {
         val settings = SettingsRepository(applicationContext).flow.first()
         return ApiClient.build(settings.backendUrl, settings.authToken)
+    }
+
+    private suspend fun sendHeartbeat(activeSeconds: Int) {
+        val api = buildApi() ?: return
+        val pkg = UsageStatsReader.currentForegroundPackage(applicationContext)
+        val category = PhoneCategorizer.categorize(pkg)
+        try {
+            api.agentHeartbeat(
+                AgentHeartbeat(
+                    source = "phone_usage_stats",
+                    foregroundCategory = category,
+                    foregroundAppHint = pkg.orEmpty(),
+                    idleSeconds = 0,
+                    activeSeconds = activeSeconds,
+                )
+            )
+        } catch (_: Exception) {
+            // Best-effort. Engine still has whatever PC agent reports landed.
+        }
+    }
+
+    private suspend fun pollPendingInterventions() {
+        val api = buildApi() ?: return
+        val pending = try {
+            api.pendingInterventions().interventions
+        } catch (_: Exception) {
+            return
+        }
+        for (intervention in pending) {
+            if (!seenInterventions.add(intervention.id)) continue
+            InterventionRenderer.render(applicationContext, intervention)
+            try {
+                api.interventionAction(
+                    intervention.id,
+                    com.buddy.app.data.InterventionAction(action = "delivered"),
+                )
+            } catch (_: Exception) {
+                // Best-effort.
+            }
+        }
     }
 
     companion object {

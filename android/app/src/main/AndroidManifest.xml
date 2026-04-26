@@ -18,6 +18,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Phase 4: phone-side drift detection via UsageStatsManager.
+         This is a "special access" permission — must be granted from
+         Settings → Apps → Special access → Usage access. The app's
+         Settings screen offers a button that deep-links there. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
     <!-- Android 11+ requires explicit visibility for SpeechRecognizer service. -->
     <queries>
         <intent>
@@ -92,6 +99,15 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".interventions.InterventionDismissReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.buddy.app.INTERVENTION_DISMISS" />
             </intent-filter>
         </receiver>
     </application>
