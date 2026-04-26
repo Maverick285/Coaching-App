@@ -169,13 +169,22 @@ fun ChatScreen(
             if (!state.backendConfigured) {
                 EmptyConfigPanel(onOpenSettings)
             } else {
-                MessagesList(
-                    messages = state.messages,
-                    isSending = state.isSending,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                )
+                if (state.messages.isEmpty() && !state.isSending) {
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        com.buddy.app.ui.quotes.WelcomeQuote()
+                    }
+                } else {
+                    MessagesList(
+                        messages = state.messages,
+                        isSending = state.isSending,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                    )
+                }
                 if (state.isListening) {
                     ListeningBar(state.partialTranscript)
                 }

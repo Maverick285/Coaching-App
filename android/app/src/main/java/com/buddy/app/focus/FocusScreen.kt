@@ -104,6 +104,7 @@ fun FocusScreen(
                         onEnd = viewModel::end,
                     )
                 } else {
+                    com.buddy.app.ui.quotes.WelcomeQuote()
                     StartSessionCard(
                         intention = state.intention,
                         minutes = state.plannedMinutes,
