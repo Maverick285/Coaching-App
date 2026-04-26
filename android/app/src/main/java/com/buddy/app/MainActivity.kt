@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
         val deeplink = intent?.getStringExtra("deeplink")
         val start = when (deeplink) {
             "goals" -> Routes.GOALS
+            "focus" -> Routes.FOCUS
             "grade" -> Routes.GRADE
             "journal" -> Routes.JOURNAL
             "chat" -> Routes.CHAT

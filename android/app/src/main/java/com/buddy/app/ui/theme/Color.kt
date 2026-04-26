@@ -2,14 +2,29 @@ package com.buddy.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Dark, calm palette. Adjustable.
-val Background = Color(0xFF0F1115)
-val Surface = Color(0xFF161A21)
-val SurfaceVariant = Color(0xFF1F242D)
-val OnSurface = Color(0xFFE6E8EE)
-val OnSurfaceMuted = Color(0xFF9098A6)
-val Primary = Color(0xFF7AA2F7)
-val OnPrimary = Color(0xFF0E1116)
-val UserBubble = Color(0xFF253449)
-val AssistantBubble = Color(0xFF1B1F27)
-val Error = Color(0xFFEF6F6C)
+/**
+ * Editorial dark palette. Warm off-white type on near-black, with a single
+ * muted clay accent. The intent is "premium hardcover, not Material default".
+ */
+
+// Surfaces
+val Background = Color(0xFF0E0E0F)        // ink black, slight warmth
+val Surface = Color(0xFF15161A)           // a hair lifted from background
+val SurfaceVariant = Color(0xFF1F2026)    // for chips, dividers, secondary cards
+
+// Type
+val OnSurface = Color(0xFFE9E3D6)         // warm off-white, like newsprint
+val OnSurfaceMuted = Color(0xFF9C9588)    // dimmed for labels, captions
+val OnSurfaceFaint = Color(0xFF6E6859)    // very muted for inert metadata
+
+// Accent — a single restrained clay/terracotta. Used sparingly.
+val Primary = Color(0xFFC78A5C)
+val OnPrimary = Color(0xFF15110D)
+
+// Conversation bubbles
+val UserBubble = Color(0xFF222328)        // soft contrast, not flashy
+val AssistantBubble = Color(0xFF181A1F)   // sits just above the surface
+
+// Status
+val Error = Color(0xFFD3705F)             // muted brick, not Material red
+val Caution = Color(0xFFCDB67A)           // warm yellow for soft warnings

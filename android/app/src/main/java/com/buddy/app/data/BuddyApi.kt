@@ -103,4 +103,35 @@ interface BuddyApi {
         @Path("day") day: String,
         @Body req: JournalEntryWrite,
     ): JournalEntry
+
+    // --- Phase 3: capture --------------------------------------------------
+
+    @POST("/capture")
+    suspend fun capture(@Body req: CaptureRequest): CaptureResponse
+
+    @POST("/capture/confirm")
+    suspend fun captureConfirm(@Body req: CaptureConfirm): CaptureDispatchResponse
+
+    // --- Phase 3: focus sessions ------------------------------------------
+
+    @POST("/focus/start")
+    suspend fun startFocus(@Body req: FocusStart): FocusSession
+
+    @POST("/focus/{id}/end")
+    suspend fun endFocus(@Path("id") id: Int, @Body req: FocusEnd): FocusSession
+
+    @GET("/focus/active")
+    suspend fun activeFocus(): FocusActiveResponse
+
+    @GET("/focus/{id}")
+    suspend fun focusDetail(@Path("id") id: Int): FocusSessionDetail
+
+    @POST("/focus/{id}/check-in")
+    suspend fun fireCheckIn(
+        @Path("id") id: Int,
+        @Query("kind") kind: String = "presence",
+    ): FocusCheckInResponse
+
+    @GET("/focus/recent")
+    suspend fun recentFocus(@Query("limit") limit: Int = 20): List<FocusSession>
 }

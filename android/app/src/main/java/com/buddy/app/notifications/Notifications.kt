@@ -13,9 +13,13 @@ import com.buddy.app.R
 
 object Notifications {
     const val CHANNEL_DAILY = "daily_rhythm"
+    const val CHANNEL_FOCUS = "focus_session"
+    const val CHANNEL_FOCUS_CHECKIN = "focus_check_in"
 
     const val NOTIF_ID_MORNING = 100
     const val NOTIF_ID_EOD = 101
+    const val NOTIF_ID_FOCUS = 200          // persistent during a session
+    const val NOTIF_ID_FOCUS_CHECKIN = 201  // each check-in toast
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -28,6 +32,27 @@ object Notifications {
                     NotificationManager.IMPORTANCE_DEFAULT,
                 ).apply {
                     description = "Morning check-in and end-of-day grading prompts."
+                }
+                mgr.createNotificationChannel(channel)
+            }
+            if (mgr.getNotificationChannel(CHANNEL_FOCUS) == null) {
+                val channel = NotificationChannel(
+                    CHANNEL_FOCUS,
+                    "Focus session",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Persistent presence while a focus session is active."
+                    setShowBadge(false)
+                }
+                mgr.createNotificationChannel(channel)
+            }
+            if (mgr.getNotificationChannel(CHANNEL_FOCUS_CHECKIN) == null) {
+                val channel = NotificationChannel(
+                    CHANNEL_FOCUS_CHECKIN,
+                    "Focus check-ins",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = "Mid-session check-in messages from your coach."
                 }
                 mgr.createNotificationChannel(channel)
             }

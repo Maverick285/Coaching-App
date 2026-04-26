@@ -3,6 +3,7 @@ package com.buddy.app.ui.chat
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -28,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -62,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.buddy.app.R
+import com.buddy.app.capture.CaptureActivity
 import com.buddy.app.ui.theme.AssistantBubble
 import com.buddy.app.ui.theme.UserBubble
 import com.buddy.app.voice.SpeechRecognition
@@ -125,6 +128,17 @@ fun ChatScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.title_chat)) },
                 actions = {
+                    IconButton(onClick = {
+                        val intent = Intent(context, CaptureActivity::class.java).apply {
+                            putExtra(CaptureActivity.EXTRA_SOURCE, "chat_topbar")
+                        }
+                        context.startActivity(intent)
+                    }) {
+                        Icon(
+                            Icons.Filled.GraphicEq,
+                            contentDescription = "Capture",
+                        )
+                    }
                     IconButton(onClick = { viewModel.startNewSession() }) {
                         Icon(
                             Icons.Filled.Add,

@@ -19,6 +19,19 @@ Kotlin + Jetpack Compose. Talks to the Phase 0/2 backend over HTTPS.
 - **AlarmManager** — morning check-in and end-of-day grade prompts. Times configurable in Settings; on first save the app pulls server defaults from `/health`'s `daily_rhythm` block. Reschedules on boot via a registered `BootReceiver`. Tapping the notification deep-links to Goals (morning) or Grade (end of day).
 - **Notification permission** requested on Android 13+ when the user enables the alarm toggle.
 
+## What's added in Phase 3
+
+- **Editorial typography** — body text in `FontFamily.Serif` (Noto Serif on modern Android), labels in sans for legibility, generous line height and a restrained type scale. Warm off-white on near-black with a single muted clay accent.
+- **Five-tab bottom nav** — Chat / Goals / **Focus** / Grade / Journal.
+- **Capture-anywhere flow** — voice → transcript → fast-tier classification → confirmation → dispatch. Each proposed action is a tickable checkbox so the user can accept some and skip others.
+- **Home-screen widget** — single-button capture launcher. Add it from your launcher's widget picker (long-press home → Widgets → Buddy → Capture).
+- **Focus sessions** — set an intention + duration + optional goal, start a body-doubling session that:
+    - keeps a persistent low-importance notification visible with remaining time,
+    - schedules check-ins at 15 + 30 minutes and a wrap-up at duration − 3,
+    - generates each check-in's text from the fast tier, calibrated to PERSONA.md,
+    - posts each check-in to a separate notification channel so they're visible without disturbing the persistent presence,
+    - auto-stops when the duration elapses.
+
 The backend is Phase 0 (the `src/buddy` Python service). The Android app does not duplicate any backend logic — every message round-trip is one `POST /converse` call.
 
 ## Building

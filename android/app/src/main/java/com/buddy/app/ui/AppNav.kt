@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.Icon
@@ -24,6 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.buddy.app.focus.FocusScreen
 import com.buddy.app.ui.chat.ChatScreen
 import com.buddy.app.ui.goals.GoalDetailScreen
 import com.buddy.app.ui.goals.GoalsScreen
@@ -34,6 +36,7 @@ import com.buddy.app.ui.settings.SettingsScreen
 object Routes {
     const val CHAT = "chat"
     const val GOALS = "goals"
+    const val FOCUS = "focus"
     const val GRADE = "grade"
     const val JOURNAL = "journal"
     const val SETTINGS = "settings"
@@ -50,6 +53,7 @@ private data class TopLevelDestination(
 private val TopLevelDestinations = listOf(
     TopLevelDestination(Routes.CHAT, "Chat", Icons.Filled.Chat),
     TopLevelDestination(Routes.GOALS, "Goals", Icons.Filled.Flag),
+    TopLevelDestination(Routes.FOCUS, "Focus", Icons.Filled.CenterFocusStrong),
     TopLevelDestination(Routes.GRADE, "Grade", Icons.Filled.AssignmentTurnedIn),
     TopLevelDestination(Routes.JOURNAL, "Journal", Icons.AutoMirrored.Filled.MenuBook),
 )
@@ -119,6 +123,7 @@ fun AppNavGraph(
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable(Routes.FOCUS) { FocusScreen() }
             composable(Routes.GRADE) { GradeScreen() }
             composable(Routes.JOURNAL) { JournalScreen() }
             composable(Routes.SETTINGS) {

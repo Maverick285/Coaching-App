@@ -29,4 +29,14 @@
     <string name="label_eod_time">End-of-day grade</string>
     <string name="label_alarms_enabled">Daily prompts</string>
     <string name="msg_notifications_required">Allow notifications to receive morning and end-of-day prompts.</string>
+
+    <!-- Phase 3: capture + focus -->
+    <string name="widget_capture_label">Capture</string>
+    <string name="widget_capture_description">Tap to dictate to Buddy.</string>
+    <string name="title_focus">Focus</string>
+    <string name="action_start_focus">Start session</string>
+    <string name="action_end_focus">End session</string>
+    <string name="hint_focus_intention">e.g. 45 minutes on the runsheet</string>
+    <string name="msg_focus_active">Focus session in progress.</string>
+    <string name="msg_no_focus">No active session.</string>
 </resources>
