@@ -196,6 +196,21 @@ fun CustomizeScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Notification settings") }
+
+            OutlinedButton(
+                onClick = {
+                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Grant accessibility (Tier 3 / Tier 4 blocks)") }
+
+            Text(
+                "Buddy's accessibility service only reads which app is foregrounded — no screen content, no keystrokes, no text. Required only if you've added Tier 3 or Tier 4 blocked apps to a goal.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

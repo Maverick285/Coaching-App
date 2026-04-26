@@ -37,4 +37,8 @@
     <string name="action_start_focus">Start session</string>
     <string name="action_end_focus">End session</string>
     <string name="hint_focus_intention">e.g. 45 minutes on the runsheet</string>
+
+    <!-- Phase 5: accessibility service description shown in the system permission grant screen -->
+    <string name="accessibility_service_description">Buddy needs accessibility access only to detect which app is foregrounded during a focus session, so it can render the friction pause or hard-block screens you configured. It does NOT read screen content, log keystrokes, or capture text. The grant is required only for Tier 3 / Tier 4 interventions; lower tiers work without it.</string>
+    <string name="accessibility_service_summary">Renders friction overlay + hard-block redirect during focus sessions.</string>
 </resources>

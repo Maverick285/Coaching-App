@@ -186,4 +186,30 @@ interface BuddyApi {
 
     @DELETE("/distraction-rules/{id}")
     suspend fun deleteDistractionRule(@Path("id") id: Int)
+
+    // --- Phase 5: blocked apps + overrides --------------------------------
+
+    @GET("/blocked-apps")
+    suspend fun blockedApps(@Query("goal_id") goalId: Int): BlockedAppRulesListResponse
+
+    @POST("/blocked-apps")
+    suspend fun createBlockedApp(@Body req: BlockedAppRuleCreate): BlockedAppRule
+
+    @DELETE("/blocked-apps/{id}")
+    suspend fun deleteBlockedApp(@Path("id") id: Int)
+
+    @GET("/blocked-apps/active")
+    suspend fun activeBlocks(): ActiveBlocksResponse
+
+    @POST("/overrides")
+    suspend fun requestOverride(@Body req: OverrideRequestCreate): OverrideRequest
+
+    @POST("/overrides/{id}/redeem")
+    suspend fun redeemOverride(
+        @Path("id") id: Int,
+        @Body req: OverrideRedeemRequest,
+    ): OverrideRedeemResponse
+
+    @GET("/overrides/{id}")
+    suspend fun getOverride(@Path("id") id: Int): OverrideRequest
 }

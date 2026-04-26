@@ -25,6 +25,17 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Phase 5: friction overlay + hard block.
+         BIND_ACCESSIBILITY_SERVICE is the system-side bind, declared on
+         the service tag. The user must grant accessibility access from
+         Settings → Accessibility → Buddy. The Customize screen
+         deep-links there with an explanation of what the service does
+         (and doesn't) read. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
     <!-- Android 11+ requires explicit visibility for SpeechRecognizer service. -->
     <queries>
         <intent>
@@ -71,6 +82,29 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Focus session presence and check-ins" />
         </service>
+
+        <service
+            android:name=".blocking.BuddyAccessibilityService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <activity
+            android:name=".blocking.FrictionOverlayActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Buddy.Capture"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
 
         <receiver
             android:name=".widget.CaptureWidgetProvider"

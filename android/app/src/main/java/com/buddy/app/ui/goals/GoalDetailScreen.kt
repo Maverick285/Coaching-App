@@ -69,6 +69,7 @@ fun GoalDetailScreen(
     var showLog by remember { mutableStateOf(false) }
     var showTask by remember { mutableStateOf(false) }
     var showDistractionDialog by remember { mutableStateOf(false) }
+    var showBlockedAppDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -107,6 +108,7 @@ fun GoalDetailScreen(
             DetailBody(
                 detail = detail,
                 rules = state.distractionRules,
+                blockedApps = state.blockedApps,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
@@ -116,6 +118,8 @@ fun GoalDetailScreen(
                 onToggleTask = { task -> viewModel.setTaskDone(task.id) },
                 onAddDistraction = { showDistractionDialog = true },
                 onRemoveDistraction = { id -> viewModel.removeDistractionRule(id) },
+                onAddBlockedApp = { showBlockedAppDialog = true },
+                onRemoveBlockedApp = { id -> viewModel.removeBlockedApp(id) },
             )
         }
     }
@@ -148,18 +152,30 @@ fun GoalDetailScreen(
             },
         )
     }
+    if (showBlockedAppDialog) {
+        AddBlockedAppDialog(
+            onDismiss = { showBlockedAppDialog = false },
+            onSubmit = { pkg, tier ->
+                viewModel.addBlockedApp(pkg, tier)
+                showBlockedAppDialog = false
+            },
+        )
+    }
 }
 
 @Composable
 private fun DetailBody(
     detail: GoalDetail,
     rules: List<com.buddy.app.data.DistractionRule>,
+    blockedApps: List<com.buddy.app.data.BlockedAppRule>,
     modifier: Modifier,
     onLogClicked: () -> Unit,
     onAddTask: () -> Unit,
     onToggleTask: (Task) -> Unit,
     onAddDistraction: () -> Unit,
     onRemoveDistraction: (Int) -> Unit,
+    onAddBlockedApp: () -> Unit,
+    onRemoveBlockedApp: (Int) -> Unit,
 ) {
     val goal = detail.goal
     LazyColumn(
@@ -330,6 +346,67 @@ private fun DetailBody(
                         }
                         androidx.compose.material3.TextButton(
                             onClick = { onRemoveDistraction(rule.id) }
+                        ) { Text("Remove") }
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Blocked apps",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.TextButton(onClick = onAddBlockedApp) {
+                    Text("+ Add")
+                }
+            }
+            Text(
+                text = "Tier 3 = 60-second friction screen. Tier 4 = redirect to home + override required. Needs accessibility access; grant from Customize.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (blockedApps.isEmpty()) {
+            item {
+                Text(
+                    "(none)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            items(blockedApps, key = { it.id }) { app ->
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = app.packageName,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                text = if (app.blockTier == 4) "Tier 4 · hard block" else "Tier 3 · friction",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        androidx.compose.material3.TextButton(
+                            onClick = { onRemoveBlockedApp(app.id) }
                         ) { Text("Remove") }
                     }
                 }
@@ -525,6 +602,67 @@ private fun AddDistractionDialog(
             TextButton(onClick = {
                 onSubmit(selected, cooldownText.toIntOrNull() ?: 90)
             }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddBlockedAppDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (packageName: String, blockTier: Int) -> Unit,
+) {
+    var pkg by remember { mutableStateOf("") }
+    var tier by remember { mutableStateOf(3) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Block an app") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Tier 3 = friction (60s pause). Tier 4 = hard block (redirect home; override required). " +
+                        "Find package names with `adb shell pm list packages | grep <vendor>`.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = pkg,
+                    onValueChange = { pkg = it.trim() },
+                    label = { Text("Package name") },
+                    placeholder = { Text("e.g. com.twitter.android") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AssistChip(
+                        onClick = { tier = 3 },
+                        label = { Text("Tier 3 friction") },
+                        colors = if (tier == 3) {
+                            androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                labelColor = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else androidx.compose.material3.AssistChipDefaults.assistChipColors(),
+                    )
+                    AssistChip(
+                        onClick = { tier = 4 },
+                        label = { Text("Tier 4 hard block") },
+                        colors = if (tier == 4) {
+                            androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                labelColor = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else androidx.compose.material3.AssistChipDefaults.assistChipColors(),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (pkg.isNotBlank()) onSubmit(pkg, tier) },
+            ) { Text("Add") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

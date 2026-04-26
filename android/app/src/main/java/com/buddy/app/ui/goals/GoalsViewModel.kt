@@ -118,6 +118,7 @@ data class GoalDetailUiState(
     val loading: Boolean = false,
     val detail: GoalDetail? = null,
     val distractionRules: List<com.buddy.app.data.DistractionRule> = emptyList(),
+    val blockedApps: List<com.buddy.app.data.BlockedAppRule> = emptyList(),
     val error: String? = null,
 )
 
@@ -152,8 +153,18 @@ class GoalDetailViewModel(
                 } catch (_: Exception) {
                     emptyList()
                 }
+                val blocks = try {
+                    r.api.blockedApps(goalId).rules
+                } catch (_: Exception) {
+                    emptyList()
+                }
                 _state.update {
-                    it.copy(loading = false, detail = detail, distractionRules = rules)
+                    it.copy(
+                        loading = false,
+                        detail = detail,
+                        distractionRules = rules,
+                        blockedApps = blocks,
+                    )
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message) }
@@ -184,6 +195,36 @@ class GoalDetailViewModel(
         viewModelScope.launch {
             try {
                 r.api.deleteDistractionRule(id)
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    fun addBlockedApp(packageName: String, blockTier: Int) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                r.api.createBlockedApp(
+                    com.buddy.app.data.BlockedAppRuleCreate(
+                        goalId = goalId,
+                        packageName = packageName,
+                        blockTier = blockTier,
+                    )
+                )
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    fun removeBlockedApp(id: Int) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                r.api.deleteBlockedApp(id)
                 refresh()
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }

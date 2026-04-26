@@ -73,6 +73,10 @@ class FocusSessionService : Service() {
         Notifications.ensureChannel(this)
         startForeground(Notifications.NOTIF_ID_FOCUS, buildPresenceNotification())
 
+        // Phase 5: keep BlockState fresh while a session is active so the
+        // accessibility service knows what to block.
+        com.buddy.app.blocking.BlockPollService.start(applicationContext)
+
         refreshJob?.cancel()
         refreshJob = scope.launch {
             while (true) {
@@ -136,6 +140,7 @@ class FocusSessionService : Service() {
         checkInJob?.cancel()
         heartbeatJob?.cancel()
         pollJob?.cancel()
+        com.buddy.app.blocking.BlockPollService.stop()
         // minSdk = 28 ≥ N, so STOP_FOREGROUND_REMOVE is always available.
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
