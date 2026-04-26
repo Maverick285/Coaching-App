@@ -1,0 +1,30 @@
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+  backend:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - BUDDY_DB_PATH=/data/buddy.db
+      - BUDDY_MEMORY_PATH=/data/memory
+    volumes:
+      - buddy_data:/data
+    expose:
+      - "8000"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  buddy_data:

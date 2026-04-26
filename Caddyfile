@@ -1,0 +1,4 @@
+{$BUDDY_PUBLIC_HOST:buddy.example.com} {
+    encode gzip
+    reverse_proxy backend:8000
+}
