@@ -7,10 +7,20 @@ because SQLAlchemy doesn't model virtual tables cleanly.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from buddy.db import Base
@@ -129,4 +139,128 @@ class IntakeSession(Base):
     state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     transcript: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON, default=list, nullable=False
+    )
+
+
+# --- Phase 2: goals, tasks, intentions, journal, par-1 grading -------------
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    timeframe: Mapped[str] = mapped_column(
+        String(32), default="open_ended", nullable=False
+    )  # open_ended | deadline | recurring
+    deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=3, nullable=False)  # 1..5
+    approach: Mapped[str] = mapped_column(
+        String(32), default="user_driven", nullable=False
+    )  # user_driven | system_assisted | hybrid
+    plan_source: Mapped[str] = mapped_column(
+        String(32), default="user_plan", nullable=False
+    )  # user_plan | system_plan | no_plan
+    state: Mapped[str] = mapped_column(
+        String(16), default="active", nullable=False, index=True
+    )  # proposed | active | paused | completed | abandoned
+    intervention_ceiling: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    pace_target_unit: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    pace_target_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    pace_target_description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    mvp_threshold: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    parent_goal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    reflection_log: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    definition_of_done: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    estimated_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    actual_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    triggering_intention_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    state: Mapped[str] = mapped_column(
+        String(16), default="proposed", nullable=False, index=True
+    )  # proposed | scheduled | in_progress | done | skipped
+    first_60_seconds: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ImplementationIntention(Base):
+    __tablename__ = "implementation_intentions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    task_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    cue_type: Mapped[str] = mapped_column(
+        String(16), nullable=False
+    )  # time_place | routine | event | obstacle
+    cue_text: Mapped[str] = mapped_column(Text, nullable=False)
+    response_text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class ProgressLog(Base):
+    __tablename__ = "progress_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    attributed_units: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    unit_label: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(16), default="manual", nullable=False
+    )  # manual | voice | pc_agent | usage_stats | system
+    confidence: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
+class DayGrade(Base):
+    __tablename__ = "day_grades"
+
+    grade_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    system_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    user_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    per_goal_scores: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    user_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    is_zero_day: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class JournalEntry(Base):
+    __tablename__ = "journal_entries"
+
+    entry_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    mood: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
     )

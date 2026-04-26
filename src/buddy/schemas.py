@@ -11,12 +11,21 @@ from pydantic import BaseModel, Field
 # --- Health ---------------------------------------------------------------
 
 
+class DailyRhythm(BaseModel):
+    timezone: str
+    morning_hour: int
+    morning_minute: int
+    end_of_day_hour: int
+    end_of_day_minute: int
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     version: str
     db_connected: bool
     memory_repo_status: str
     models_resolved: dict[str, str]
+    daily_rhythm: DailyRhythm | None = None
 
 
 # --- Converse -------------------------------------------------------------

@@ -4,16 +4,20 @@ budget checks, and memory-repo backup pushes.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from buddy.config import get_settings
+from buddy.db import get_session_factory
 from buddy.logging_setup import get_logger
 from buddy.memory.consolidation import run_consolidation
 from buddy.memory.index import reconcile_index
 from buddy.memory.store import MemoryStore
 from buddy.services.budget import cap_status
+from buddy.services.grading import compute_day_grade, upsert_day_grade
 
 log = get_logger("buddy.scheduler")
 _scheduler: AsyncIOScheduler | None = None
@@ -45,6 +49,22 @@ async def _backup_push_job() -> None:
     log.info("scheduler.backup_push", status=status)
 
 
+async def _day_grade_precompute_job() -> None:
+    """Compute today's grade so it's instant when the user opens the app at end-of-day."""
+    today = datetime.utcnow().date()
+    factory = get_session_factory()
+    async with factory() as db:
+        result = await compute_day_grade(db, today)
+        await upsert_day_grade(db, result)
+        await db.commit()
+    log.info(
+        "scheduler.day_grade",
+        date=str(today),
+        score=result.system_score,
+        zero=result.is_zero_day,
+    )
+
+
 def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -74,6 +94,16 @@ def start_scheduler() -> AsyncIOScheduler:
         _backup_push_job,
         CronTrigger(hour=settings.consolidation_hour, minute=15, timezone=settings.timezone),
         id="backup_push",
+        replace_existing=True,
+    )
+    sched.add_job(
+        _day_grade_precompute_job,
+        CronTrigger(
+            hour=settings.end_of_day_hour,
+            minute=settings.end_of_day_minute,
+            timezone=settings.timezone,
+        ),
+        id="day_grade_precompute",
         replace_existing=True,
     )
 

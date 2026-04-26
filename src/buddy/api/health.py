@@ -6,10 +6,11 @@ from fastapi import APIRouter
 from sqlalchemy import text
 
 from buddy import __version__
+from buddy.config import get_settings
 from buddy.db import get_session_factory
 from buddy.llm.models import resolve_all_tiers
 from buddy.memory.store import MemoryStore
-from buddy.schemas import HealthResponse
+from buddy.schemas import DailyRhythm, HealthResponse
 
 router = APIRouter()
 
@@ -37,10 +38,20 @@ async def health() -> HealthResponse:
 
     overall = "ok" if db_ok and not repo_status.startswith("error") else "degraded"
 
+    settings = get_settings()
+    rhythm = DailyRhythm(
+        timezone=settings.timezone,
+        morning_hour=settings.morning_check_in_hour,
+        morning_minute=settings.morning_check_in_minute,
+        end_of_day_hour=settings.end_of_day_hour,
+        end_of_day_minute=settings.end_of_day_minute,
+    )
+
     return HealthResponse(
         status=overall,  # type: ignore[arg-type]
         version=__version__,
         db_connected=db_ok,
         memory_repo_status=repo_status,
         models_resolved=models,
+        daily_rhythm=rhythm,
     )

@@ -12,9 +12,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from buddy import __version__
 from buddy.api import conversations as conversations_api
 from buddy.api import converse as converse_api
+from buddy.api import goals as goals_api
+from buddy.api import grade as grade_api
 from buddy.api import health as health_api
 from buddy.api import intake as intake_api
+from buddy.api import journal as journal_api
 from buddy.api import memory as memory_api
+from buddy.api import progress as progress_api
 from buddy.api import usage as usage_api
 from buddy.logging_setup import configure_logging, get_logger
 from buddy.memory.index import reconcile_index
@@ -61,6 +65,11 @@ def create_app() -> FastAPI:
     app.include_router(memory_api.router)
     app.include_router(conversations_api.router)
     app.include_router(usage_api.router)
+    # Phase 2 routes.
+    app.include_router(goals_api.router)
+    app.include_router(progress_api.router)
+    app.include_router(grade_api.router)
+    app.include_router(journal_api.router)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(_: Request, exc: StarletteHTTPException):

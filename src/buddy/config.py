@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="BUDDY_LOG_LEVEL")
     timezone: str = Field(default="America/Chicago", alias="BUDDY_TIMEZONE")
     consolidation_hour: int = Field(default=3, alias="BUDDY_CONSOLIDATION_HOUR")
+    morning_check_in_hour: int = Field(default=7, alias="BUDDY_MORNING_HOUR")
+    morning_check_in_minute: int = Field(default=0, alias="BUDDY_MORNING_MINUTE")
+    end_of_day_hour: int = Field(default=21, alias="BUDDY_EOD_HOUR")
+    end_of_day_minute: int = Field(default=0, alias="BUDDY_EOD_MINUTE")
 
     # LLM tier pins (optional)
     fast_model_pin: str = Field(default="", alias="BUDDY_FAST_MODEL_PIN")

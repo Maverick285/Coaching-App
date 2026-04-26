@@ -354,6 +354,294 @@ def clone() -> None:
     console.print(data["instructions"])
 
 
+# ---- Phase 2: goals, tasks, log, grade, journal --------------------------
+
+
+@cli.group()
+def goal() -> None:
+    """Goal CRUD."""
+
+
+@goal.command("list")
+def goal_list() -> None:
+    client, _ = _client()
+    r = client.get("/goals")
+    r.raise_for_status()
+    table = Table(title="Goals")
+    table.add_column("ID", justify="right")
+    table.add_column("Pri", justify="right")
+    table.add_column("State")
+    table.add_column("Pace")
+    table.add_column("Statement")
+    for g in r.json()["goals"]:
+        pace = (
+            f"{g['pace_target_amount']:g} {g['pace_target_unit']}"
+            if g["pace_target_amount"]
+            else "-"
+        )
+        table.add_row(str(g["id"]), str(g["priority"]), g["state"], pace, g["statement"][:60])
+    console.print(table)
+
+
+@goal.command("show")
+@click.argument("goal_id", type=int)
+def goal_show(goal_id: int) -> None:
+    client, _ = _client()
+    r = client.get(f"/goals/{goal_id}")
+    r.raise_for_status()
+    data = r.json()
+    g = data["goal"]
+    console.print(
+        Panel(
+            f"[bold]{g['statement']}[/]\n\n"
+            f"State: {g['state']}  Priority: {g['priority']}  Approach: {g['approach']}\n"
+            f"Pace: {g['pace_target_amount']:g} {g['pace_target_unit']}\n"
+            f"Today: {data['today_progress']:g} → grade {data['today_grade']:.2f}\n"
+            f"MVP threshold: {g['mvp_threshold'] or '(none)'}",
+            title=f"Goal {goal_id}",
+            border_style="cyan",
+        )
+    )
+    if data["tasks"]:
+        table = Table(title="Tasks")
+        table.add_column("ID", justify="right")
+        table.add_column("State")
+        table.add_column("Description")
+        for t in data["tasks"]:
+            table.add_row(str(t["id"]), t["state"], t["description"][:60])
+        console.print(table)
+    if data["intentions"]:
+        for i in data["intentions"]:
+            console.print(
+                f"  [magenta]{i['cue_type']}:[/] if {i['cue_text']} → then {i['response_text']}"
+            )
+
+
+@goal.command("add")
+@click.option("--statement", prompt=True)
+@click.option("--priority", default=3, type=click.IntRange(1, 5))
+@click.option("--pace-unit", default="")
+@click.option("--pace-amount", default=0.0, type=float)
+@click.option("--pace-description", default="")
+@click.option("--mvp", default="")
+def goal_add(statement, priority, pace_unit, pace_amount, pace_description, mvp) -> None:
+    client, _ = _client()
+    r = client.post(
+        "/goals",
+        json={
+            "statement": statement,
+            "priority": priority,
+            "pace_target_unit": pace_unit,
+            "pace_target_amount": pace_amount,
+            "pace_target_description": pace_description,
+            "mvp_threshold": mvp,
+        },
+    )
+    r.raise_for_status()
+    console.print(f"[green]Created goal {r.json()['id']}.[/]")
+
+
+@goal.command("woop")
+@click.option("--wish", prompt=True, help="What do you want?")
+@click.option("--obstacle", default=None, help="Initial obstacle in current reality")
+@click.option("--pace-unit", default=None, help="Suggested pace unit")
+def goal_woop(wish, obstacle, pace_unit) -> None:
+    """Run WOOP planning on a wish; print the proposed structure."""
+    client, _ = _client()
+    payload = {"wish": wish}
+    if obstacle:
+        payload["initial_obstacle"] = obstacle
+    if pace_unit:
+        payload["desired_pace_unit"] = pace_unit
+    r = client.post("/goals/woop", json=payload)
+    r.raise_for_status()
+    data = r.json()
+    body = (
+        f"**Wish:** {data['wish']}\n\n"
+        f"**Outcome:** {data['outcome']}\n\n"
+        f"**Obstacles:**\n" + "\n".join(f"- {o}" for o in data["obstacles"]) + "\n\n"
+        f"**Plan (if-then):**\n" + "\n".join(f"- {p}" for p in data["plan"]) + "\n\n"
+        f"**Suggested tasks:**\n" + "\n".join(f"- {t}" for t in data["suggested_tasks"]) + "\n\n"
+        f"**Suggested pace:** {data['suggested_pace_amount']:g} {data['suggested_pace_unit']} — {data['suggested_pace_description']}"
+    )
+    console.print(Panel(Markdown(body), title="WOOP", border_style="cyan"))
+
+
+@goal.command("state")
+@click.argument("goal_id", type=int)
+@click.argument("new_state", type=click.Choice(["proposed", "active", "paused", "completed", "abandoned"]))
+def goal_state(goal_id, new_state) -> None:
+    client, _ = _client()
+    r = client.patch(f"/goals/{goal_id}", json={"state": new_state})
+    r.raise_for_status()
+    console.print(f"[green]Goal {goal_id} → {new_state}[/]")
+
+
+@cli.group()
+def task() -> None:
+    """Task CRUD."""
+
+
+@task.command("list")
+@click.option("--goal", "goal_id", type=int, default=None)
+@click.option("--state", default=None)
+def task_list(goal_id, state) -> None:
+    client, _ = _client()
+    params = {}
+    if goal_id is not None:
+        params["goal_id"] = goal_id
+    if state:
+        params["state"] = state
+    r = client.get("/tasks", params=params)
+    r.raise_for_status()
+    table = Table(title="Tasks")
+    table.add_column("ID", justify="right")
+    table.add_column("Goal", justify="right")
+    table.add_column("State")
+    table.add_column("Description")
+    for t in r.json()["tasks"]:
+        table.add_row(str(t["id"]), str(t["goal_id"]), t["state"], t["description"][:60])
+    console.print(table)
+
+
+@task.command("done")
+@click.argument("task_id", type=int)
+def task_done(task_id) -> None:
+    client, _ = _client()
+    r = client.patch(f"/tasks/{task_id}", json={"state": "done"})
+    r.raise_for_status()
+    console.print(f"[green]Task {task_id} done.[/]")
+
+
+@cli.command()
+@click.argument("text", nargs=-1, required=True)
+@click.option("--goal", "goal_id", type=int, default=None, help="Skip attribution; log directly.")
+@click.option("--units", default=None, type=float)
+@click.option("--unit-label", default="")
+def log(text, goal_id, units, unit_label) -> None:
+    """Log progress. Either pass --goal/--units for direct, or free-form for attribution."""
+    client, _ = _client()
+    text_str = " ".join(text)
+    if goal_id is not None and units is not None:
+        r = client.post(
+            "/progress/log",
+            json={
+                "goal_id": goal_id,
+                "attributed_units": units,
+                "unit_label": unit_label,
+                "raw_text": text_str,
+            },
+        )
+        r.raise_for_status()
+        console.print(f"[green]Logged {units} {unit_label} on goal {goal_id}.[/]")
+    else:
+        r = client.post("/progress/freeform", json={"text": text_str})
+        r.raise_for_status()
+        data = r.json()
+        for a in data["attributions"]:
+            console.print(
+                f"  [cyan]goal {a['goal_id']}[/]: {a['units']:g} {a['unit_label']} (conf {a['confidence']:.2f}) — {a['rationale']}"
+            )
+        if data["unattributed_text"]:
+            console.print(f"  [dim]unattributed:[/] {data['unattributed_text']}")
+
+
+@cli.command()
+def grade() -> None:
+    """Show today's par-1 grade with the system explanation."""
+    client, _ = _client()
+    r = client.get("/grade/today")
+    r.raise_for_status()
+    data = r.json()
+    console.print(
+        Panel(
+            f"[bold]Today: {data['system_score']:.2f}[/]"
+            + (" [red](zero day)[/]" if data["is_zero_day"] else "")
+            + f"\n\n{data['explanation']}",
+            title=str(data["grade_date"]),
+            border_style="green" if not data["is_zero_day"] else "red",
+        )
+    )
+    if data["per_goal"]:
+        table = Table(title="Per-goal")
+        table.add_column("Goal", justify="right")
+        table.add_column("Score", justify="right")
+        table.add_column("Today")
+        table.add_column("Pace")
+        for p in data["per_goal"]:
+            table.add_row(
+                str(p["goal_id"]),
+                f"{p['score']:.2f}",
+                f"{p['progress_today']:g} {p['pace_target_unit']}",
+                f"{p['pace_target_amount']:g} {p['pace_target_unit']}",
+            )
+        console.print(table)
+
+
+@cli.command()
+def streak() -> None:
+    """Show the no-zero-day streak with paused days marked."""
+    client, _ = _client()
+    r = client.get("/streak")
+    r.raise_for_status()
+    data = r.json()
+    console.print(
+        f"[bold]Current streak: {data['current_streak_length']} days[/]"
+        + (f"  pauses: {len(data['pause_days'])}" if data["pause_days"] else "")
+    )
+    for d in data["history"][-14:]:
+        marker = "·" if d["is_pause"] else ("0" if d["is_zero"] else "✓")
+        console.print(f"  {d['date']}: {marker} {d['score']:.2f}")
+
+
+@cli.command()
+def weekly() -> None:
+    """Run a weekly review and print the rollup."""
+    client, _ = _client()
+    r = client.get("/weekly-review")
+    r.raise_for_status()
+    data = r.json()
+    body = (
+        f"**Week:** {data['week_start']} → {data['week_end']}\n\n"
+        f"**Average grade:** {data['average_day_grade']:.2f}\n\n"
+        f"**Patterns:**\n"
+        + "\n".join(f"- {p}" for p in data["pattern_observations"])
+        + "\n\n**Suggestions:**\n"
+        + "\n".join(f"- {s}" for s in data["suggested_adjustments"])
+    )
+    console.print(Panel(Markdown(body), title="Weekly review", border_style="cyan"))
+
+
+@cli.command()
+@click.option("--day", default=None, help="ISO date; default today.")
+def journal(day) -> None:
+    """Edit today's journal entry in $EDITOR."""
+    import datetime as _dt
+
+    client, cfg = _client()
+    target = day or _dt.date.today().isoformat()
+    r = client.get(f"/journal/{target}")
+    r.raise_for_status()
+    body = r.json().get("content", "")
+
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w+", suffix=".md", delete=False) as tmp:
+        tmp.write(body)
+        tmp_path = Path(tmp.name)
+    try:
+        subprocess.run([cfg.editor, str(tmp_path)], check=True)  # noqa: S603
+        new = tmp_path.read_text(encoding="utf-8")
+    finally:
+        os.unlink(tmp_path)
+    if new == body:
+        console.print("[dim]No changes.[/]")
+        return
+    r = client.put(f"/journal/{target}", json={"content": new, "mood": "", "tags": []})
+    r.raise_for_status()
+    console.print(f"[green]Saved journal for {target}.[/]")
+
+
 def main() -> None:
     cli()
 
