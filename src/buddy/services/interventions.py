@@ -33,7 +33,8 @@ from buddy.models import (
 )
 
 ESCALATION_GAP_SECONDS = 60  # spec says "30-60s gap"; 60s is the safer default
-MAX_TIER_PHASE_4 = 2          # tiers 3-5 are Phase 5
+MAX_TIER_PHASE_5 = 4          # 0/1/2 = nudges, 3 = friction, 4 = hard block
+DEFAULT_INTERVENTION_CEILING = 2
 
 
 @dataclass
@@ -187,7 +188,11 @@ def _drift_message(tier: int, category: str) -> str:
         return f"You drifted into {category}. Back to the work?"
     if tier == 1:
         return f"Still in {category}. The next move is the file. Open it."
-    return f"Two minutes in {category}. The session is yours. Take it back."
+    if tier == 2:
+        return f"Two minutes in {category}. The session is yours. Take it back."
+    if tier == 3:
+        return f"Friction is on for {category}. Sixty-second pause before you go further."
+    return f"{category} is blocked for the rest of the session. Override if it's real."
 
 
 def _floor_message(tier: int, goal_statement: str) -> str:
@@ -239,11 +244,19 @@ async def _fire_or_escalate(
         await session.flush()
         return new
 
+    # Resolve the per-goal ceiling — defaults to 2 (no friction/hard block
+    # unless the user explicitly opted in by raising the ceiling).
+    ceiling = DEFAULT_INTERVENTION_CEILING
+    if live.goal_id is not None:
+        goal = await session.get(Goal, live.goal_id)
+        if goal is not None:
+            ceiling = max(0, min(MAX_TIER_PHASE_5, goal.intervention_ceiling))
+
     # We have a live one — escalate if grace elapsed and we have headroom.
     if (
         live.next_escalation_at is not None
         and now >= live.next_escalation_at
-        and live.tier < MAX_TIER_PHASE_4
+        and live.tier < ceiling
     ):
         new_tier = live.tier + 1
         escalated = Intervention(
@@ -253,7 +266,7 @@ async def _fire_or_escalate(
             fired_at=now,
             next_escalation_at=(
                 now + timedelta(seconds=ESCALATION_GAP_SECONDS)
-                if new_tier < MAX_TIER_PHASE_4
+                if new_tier < ceiling
                 else None
             ),
             reason=reason,
@@ -282,6 +295,14 @@ async def run_engine_tick(session: AsyncSession) -> TickResult:
     daily-floor checks. Idempotent: safe to run every 30 seconds."""
     drift_fired: list[Intervention] = []
     floor_fired: list[Intervention] = []
+
+    # Phase 5: if an override window is open, the engine takes a breath.
+    # The user just bought 15 minutes of grace from the approver; nagging
+    # them with new drift fires would make the override pointless.
+    from buddy.services.overrides import get_active_override
+
+    if (await get_active_override(session)) is not None:
+        return TickResult(drift_fired=[], floor_fired=[])
 
     active_sessions = (
         await session.execute(

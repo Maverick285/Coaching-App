@@ -58,6 +58,28 @@ class Settings(BaseSettings):
         default="", alias="BUDDY_DREAMS_NOTIFICATION_EMAIL"
     )
 
+    # Phase 5: override system (SMS to a designated approver)
+    twilio_account_sid: str = Field(default="", alias="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: str = Field(default="", alias="TWILIO_AUTH_TOKEN")
+    twilio_from_number: str = Field(default="", alias="TWILIO_FROM_NUMBER")
+    override_approver_number: str = Field(
+        default="", alias="BUDDY_OVERRIDE_APPROVER_NUMBER"
+    )
+    override_approver_label: str = Field(
+        default="approver", alias="BUDDY_OVERRIDE_APPROVER_LABEL"
+    )
+
+    @property
+    def sms_configured(self) -> bool:
+        return all(
+            [
+                self.twilio_account_sid,
+                self.twilio_auth_token,
+                self.twilio_from_number,
+                self.override_approver_number,
+            ]
+        )
+
     @property
     def db_url(self) -> str:
         return f"sqlite+aiosqlite:///{self.db_path}"

@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from buddy import __version__
 from buddy.api import agent as agent_api
+from buddy.api import blocks as blocks_api
 from buddy.api import capture as capture_api
 from buddy.api import conversations as conversations_api
 from buddy.api import converse as converse_api
@@ -22,6 +23,7 @@ from buddy.api import intake as intake_api
 from buddy.api import interventions as interventions_api
 from buddy.api import journal as journal_api
 from buddy.api import memory as memory_api
+from buddy.api import overrides as overrides_api
 from buddy.api import profile as profile_api
 from buddy.api import progress as progress_api
 from buddy.api import usage as usage_api
@@ -83,6 +85,9 @@ def create_app() -> FastAPI:
     app.include_router(interventions_api.router)
     # Customization: profile + onboarding state.
     app.include_router(profile_api.router)
+    # Phase 5: blocked-app rules + override system.
+    app.include_router(blocks_api.router)
+    app.include_router(overrides_api.router)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(_: Request, exc: StarletteHTTPException):
