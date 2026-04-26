@@ -148,4 +148,42 @@ interface BuddyApi {
         @Path("id") id: Int,
         @Body req: InterventionAction,
     ): Intervention
+
+    // --- Customization: profile + intake + memory + distraction rules ----
+
+    @GET("/profile")
+    suspend fun getProfile(): ProfileResponse
+
+    @PUT("/profile")
+    suspend fun updateProfile(@Body req: ProfileUpdate): ProfileResponse
+
+    @POST("/intake/start")
+    suspend fun intakeStart(): IntakeStartResponse
+
+    @POST("/intake/turn")
+    suspend fun intakeTurn(@Body req: IntakeTurnRequest): IntakeTurnResponse
+
+    @POST("/intake/finalize")
+    suspend fun intakeFinalize(@Body req: IntakeFinalizeRequest): IntakeFinalizeResponse
+
+    @GET("/memory/files")
+    suspend fun memoryFiles(): MemoryFilesResponse
+
+    @GET("/memory/file/{path}")
+    suspend fun memoryFile(@Path("path") path: String): MemoryFileContent
+
+    @PUT("/memory/file/{path}")
+    suspend fun memoryFileWrite(
+        @Path("path") path: String,
+        @Body req: MemoryFileWrite,
+    ): MemoryFileContent
+
+    @GET("/distraction-rules")
+    suspend fun distractionRules(@Query("goal_id") goalId: Int): DistractionRulesListResponse
+
+    @POST("/distraction-rules")
+    suspend fun createDistractionRule(@Body req: DistractionRuleCreate): DistractionRule
+
+    @DELETE("/distraction-rules/{id}")
+    suspend fun deleteDistractionRule(@Path("id") id: Int)
 }

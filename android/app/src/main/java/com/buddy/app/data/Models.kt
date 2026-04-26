@@ -70,3 +70,107 @@ data class ConversationDetail(
     val title: String,
     val messages: List<ConversationMessageOut>,
 )
+
+// --- Profile ---------------------------------------------------------------
+
+@Serializable
+data class ProfileResponse(
+    @SerialName("user_name") val userName: String,
+    @SerialName("persona_name") val personaName: String,
+    val timezone: String,
+    @SerialName("onboarding_complete") val onboardingComplete: Boolean,
+    @SerialName("has_persona_md") val hasPersonaMd: Boolean,
+    @SerialName("has_memory_md") val hasMemoryMd: Boolean,
+)
+
+@Serializable
+data class ProfileUpdate(
+    @SerialName("user_name") val userName: String? = null,
+    @SerialName("persona_name") val personaName: String? = null,
+    val timezone: String? = null,
+)
+
+// --- Persona intake (in-app flow) -----------------------------------------
+
+@Serializable
+data class IntakeStartResponse(
+    @SerialName("intake_id") val intakeId: String,
+    val question: String,
+    val step: Int,
+    @SerialName("total_steps") val totalSteps: Int,
+)
+
+@Serializable
+data class IntakeTurnRequest(
+    @SerialName("intake_id") val intakeId: String,
+    val answer: String,
+)
+
+@Serializable
+data class IntakeTurnResponse(
+    @SerialName("intake_id") val intakeId: String,
+    val question: String? = null,
+    val step: Int,
+    @SerialName("total_steps") val totalSteps: Int,
+    val finished: Boolean,
+)
+
+@Serializable
+data class IntakeFinalizeRequest(
+    @SerialName("intake_id") val intakeId: String,
+)
+
+@Serializable
+data class IntakeFinalizeResponse(
+    @SerialName("intake_id") val intakeId: String,
+    @SerialName("persona_md") val personaMd: String,
+    @SerialName("memory_md") val memoryMd: String,
+)
+
+// --- Memory files (PERSONA.md / MEMORY.md / PATTERNS.md editor) ----------
+
+@Serializable
+data class MemoryFileMeta(
+    val path: String,
+    @SerialName("document_type") val documentType: String,
+    val bytes: Int,
+    @SerialName("last_modified") val lastModified: String,
+    val indexed: Boolean,
+)
+
+@Serializable
+data class MemoryFilesResponse(val files: List<MemoryFileMeta>)
+
+@Serializable
+data class MemoryFileContent(
+    val path: String,
+    val content: String,
+    @SerialName("last_modified") val lastModified: String,
+)
+
+@Serializable
+data class MemoryFileWrite(
+    val content: String,
+    @SerialName("commit_message") val commitMessage: String? = null,
+)
+
+// --- Distraction rules (per-goal Phase 4 editor) -------------------------
+
+@Serializable
+data class DistractionRule(
+    val id: Int,
+    @SerialName("goal_id") val goalId: Int,
+    @SerialName("distractor_category") val distractorCategory: String,
+    @SerialName("cooldown_seconds") val cooldownSeconds: Int,
+    @SerialName("is_active") val isActive: Boolean,
+)
+
+@Serializable
+data class DistractionRulesListResponse(val rules: List<DistractionRule>)
+
+@Serializable
+data class DistractionRuleCreate(
+    @SerialName("goal_id") val goalId: Int,
+    @SerialName("distractor_category") val distractorCategory: String,
+    @SerialName("cooldown_seconds") val cooldownSeconds: Int = 90,
+)

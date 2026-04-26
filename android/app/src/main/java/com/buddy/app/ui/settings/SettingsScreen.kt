@@ -53,6 +53,7 @@ import com.buddy.app.R
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenCustomize: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.factory(
             LocalContext.current.applicationContext as Application
@@ -219,6 +220,13 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Button(
+                onClick = onOpenCustomize,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Customize persona, memory, distractions →") }
 
             Spacer(Modifier.height(8.dp))
             Text(

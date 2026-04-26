@@ -127,6 +127,7 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
     payload = _parse_synthesis_json(result.text)
     persona_md = payload["persona_md"].strip() + "\n"
     memory_md = payload["memory_md"].strip() + "\n"
+    chosen_name = str(payload.get("name") or "").strip()
 
     store = MemoryStore()
     store.write("PERSONA.md", persona_md, commit_message="intake: synthesize PERSONA.md")
@@ -134,12 +135,23 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
     await index_file("PERSONA.md", store=store)
     await index_file("MEMORY.md", store=store)
 
+    # Persist the persona name + mark onboarded.
+    from buddy.services.profile import (
+        KEY_PERSONA_NAME,
+        mark_onboarded,
+        set_pref,
+    )
+
     factory = get_session_factory()
     async with factory() as db:
         sess = await db.get(IntakeSession, req.intake_id)
         if sess is not None:
             sess.finalized_at = datetime.utcnow()
-            await db.commit()
+        if chosen_name and chosen_name.lower() != "coach":
+            await set_pref(db, KEY_PERSONA_NAME, chosen_name)
+        await db.commit()
+    await mark_onboarded()
+    async with factory() as db:
         db.add(
             ApiUsage(
                 provider="anthropic",

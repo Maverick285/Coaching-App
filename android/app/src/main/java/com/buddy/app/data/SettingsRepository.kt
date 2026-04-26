@@ -20,6 +20,7 @@ data class BuddySettings(
     val endOfDayHour: Int = 21,
     val endOfDayMinute: Int = 0,
     val alarmsEnabled: Boolean = true,
+    val onboardingComplete: Boolean = false,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -33,6 +34,7 @@ class SettingsRepository(private val context: Context) {
         val EOD_HOUR = intPreferencesKey("eod_hour")
         val EOD_MINUTE = intPreferencesKey("eod_minute")
         val ALARMS_ENABLED = booleanPreferencesKey("alarms_enabled")
+        val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
     }
 
     val flow: Flow<BuddySettings> = context.dataStore.data.map { prefs ->
@@ -45,6 +47,7 @@ class SettingsRepository(private val context: Context) {
             endOfDayHour = prefs[Keys.EOD_HOUR] ?: 21,
             endOfDayMinute = prefs[Keys.EOD_MINUTE] ?: 0,
             alarmsEnabled = prefs[Keys.ALARMS_ENABLED] ?: true,
+            onboardingComplete = prefs[Keys.ONBOARDING_COMPLETE] ?: false,
         )
     }
 
@@ -84,6 +87,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAlarmsEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.ALARMS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setOnboardingComplete(complete: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.ONBOARDING_COMPLETE] = complete
         }
     }
 }

@@ -27,19 +27,23 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.buddy.app.focus.FocusScreen
 import com.buddy.app.ui.chat.ChatScreen
+import com.buddy.app.ui.customize.CustomizeScreen
 import com.buddy.app.ui.goals.GoalDetailScreen
 import com.buddy.app.ui.goals.GoalsScreen
 import com.buddy.app.ui.grade.GradeScreen
 import com.buddy.app.ui.journal.JournalScreen
+import com.buddy.app.ui.onboarding.OnboardingScreen
 import com.buddy.app.ui.settings.SettingsScreen
 
 object Routes {
+    const val ONBOARDING = "onboarding"
     const val CHAT = "chat"
     const val GOALS = "goals"
     const val FOCUS = "focus"
     const val GRADE = "grade"
     const val JOURNAL = "journal"
     const val SETTINGS = "settings"
+    const val CUSTOMIZE = "customize"
     const val GOAL_DETAIL = "goal/{goalId}"
     fun goalDetail(goalId: Int) = "goal/$goalId"
 }
@@ -127,7 +131,20 @@ fun AppNavGraph(
             composable(Routes.GRADE) { GradeScreen() }
             composable(Routes.JOURNAL) { JournalScreen() }
             composable(Routes.SETTINGS) {
-                SettingsScreen(onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenCustomize = { navController.navigate(Routes.CUSTOMIZE) },
+                )
+            }
+            composable(Routes.CUSTOMIZE) {
+                CustomizeScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Routes.ONBOARDING) {
+                OnboardingScreen(onComplete = {
+                    navController.navigate(Routes.CHAT) {
+                        popUpTo(Routes.ONBOARDING) { inclusive = true }
+                    }
+                })
             }
         }
     }

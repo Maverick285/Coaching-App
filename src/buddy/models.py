@@ -384,3 +384,22 @@ class DistractionRule(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+
+
+class Preference(Base):
+    """Tiny key/value store for runtime-mutable user preferences that don't
+    fit into PERSONA.md / MEMORY.md (and shouldn't require a restart):
+
+      - user_name        — display name (overrides $BUDDY_USER_NAME)
+      - persona_name     — persona's chosen name (overrides $BUDDY_PERSONA_NAME)
+      - timezone         — IANA tz (overrides $BUDDY_TIMEZONE)
+      - onboarding_completed_at — ISO timestamp
+    """
+
+    __tablename__ = "preferences"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )

@@ -117,6 +117,7 @@ data class GoalDetailUiState(
     val configured: Boolean = false,
     val loading: Boolean = false,
     val detail: GoalDetail? = null,
+    val distractionRules: List<com.buddy.app.data.DistractionRule> = emptyList(),
     val error: String? = null,
 )
 
@@ -145,9 +146,47 @@ class GoalDetailViewModel(
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             try {
-                _state.update { it.copy(loading = false, detail = r.getGoal(goalId)) }
+                val detail = r.getGoal(goalId)
+                val rules = try {
+                    r.api.distractionRules(goalId).rules
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                _state.update {
+                    it.copy(loading = false, detail = detail, distractionRules = rules)
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun addDistractionRule(category: String, cooldownSeconds: Int = 90) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                r.api.createDistractionRule(
+                    com.buddy.app.data.DistractionRuleCreate(
+                        goalId = goalId,
+                        distractorCategory = category,
+                        cooldownSeconds = cooldownSeconds,
+                    )
+                )
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    fun removeDistractionRule(id: Int) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                r.api.deleteDistractionRule(id)
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
             }
         }
     }

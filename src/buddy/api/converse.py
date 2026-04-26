@@ -70,8 +70,22 @@ async def converse(req: ConverseRequest) -> ConverseResponse:
     store = MemoryStore()
     ctx = await assemble_context(user_message=req.message, store=store)
 
-    # 3. Build the persona system prompt.
-    system_prompt = build_persona_system_prompt(retrieved=ctx)
+    # 3. Build the persona system prompt with resolved profile fields.
+    from buddy.services.profile import (
+        resolve_persona_name,
+        resolve_timezone,
+        resolve_user_name,
+    )
+
+    user_name = await resolve_user_name()
+    persona_name = await resolve_persona_name()
+    timezone = await resolve_timezone()
+    system_prompt = build_persona_system_prompt(
+        retrieved=ctx,
+        user_name=user_name,
+        persona_name=persona_name,
+        timezone=timezone,
+    )
 
     # 4. Route + call.
     tier = select_tier(message=req.message, force_reasoning=req.force_reasoning_tier)

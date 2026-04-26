@@ -64,26 +64,33 @@ You do not surface observations:
 """
 
 
-def build_persona_system_prompt(*, retrieved: AssembledContext) -> str:
+def build_persona_system_prompt(
+    *,
+    retrieved: AssembledContext,
+    user_name: str | None = None,
+    persona_name: str | None = None,
+    timezone: str | None = None,
+) -> str:
     settings = get_settings()
     store = MemoryStore()
 
     persona_md = store.read("PERSONA.md") if store.exists("PERSONA.md") else "(empty)"
     memory_md = store.read("MEMORY.md") if store.exists("MEMORY.md") else "(empty)"
 
+    tz_name = timezone or settings.timezone
     try:
-        tz = ZoneInfo(settings.timezone)
+        tz = ZoneInfo(tz_name)
     except Exception:
         tz = ZoneInfo("UTC")
     now = datetime.now(tz=tz)
 
     return PROMPT_TEMPLATE.format(
-        persona_name=settings.persona_name,
-        user_name=settings.user_name,
+        persona_name=persona_name or settings.persona_name,
+        user_name=user_name or settings.user_name,
         persona_md=persona_md.strip(),
         memory_md=memory_md.strip(),
         retrieved_context=retrieved.render() or "_(no relevant memory retrieved)_",
         now=now.strftime("%Y-%m-%d %H:%M"),
-        timezone=settings.timezone,
+        timezone=tz_name,
         weekday=now.strftime("%A"),
     )

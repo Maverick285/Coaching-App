@@ -22,6 +22,7 @@ from buddy.api import intake as intake_api
 from buddy.api import interventions as interventions_api
 from buddy.api import journal as journal_api
 from buddy.api import memory as memory_api
+from buddy.api import profile as profile_api
 from buddy.api import progress as progress_api
 from buddy.api import usage as usage_api
 from buddy.logging_setup import configure_logging, get_logger
@@ -80,6 +81,8 @@ def create_app() -> FastAPI:
     # Phase 4 routes.
     app.include_router(agent_api.router)
     app.include_router(interventions_api.router)
+    # Customization: profile + onboarding state.
+    app.include_router(profile_api.router)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(_: Request, exc: StarletteHTTPException):

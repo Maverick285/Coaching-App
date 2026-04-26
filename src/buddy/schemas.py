@@ -28,6 +28,21 @@ class HealthResponse(BaseModel):
     daily_rhythm: DailyRhythm | None = None
 
 
+class ProfileResponse(BaseModel):
+    user_name: str
+    persona_name: str
+    timezone: str
+    onboarding_complete: bool
+    has_persona_md: bool
+    has_memory_md: bool
+
+
+class ProfileUpdate(BaseModel):
+    user_name: str | None = None
+    persona_name: str | None = None
+    timezone: str | None = None
+
+
 # --- Converse -------------------------------------------------------------
 
 

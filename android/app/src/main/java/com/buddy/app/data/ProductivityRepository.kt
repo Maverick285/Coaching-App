@@ -1,6 +1,6 @@
 package com.buddy.app.data
 
-class ProductivityRepository(private val api: BuddyApi) {
+class ProductivityRepository(val api: BuddyApi) {
 
     // Goals
     suspend fun listGoals(state: String? = null) = api.listGoals(state)

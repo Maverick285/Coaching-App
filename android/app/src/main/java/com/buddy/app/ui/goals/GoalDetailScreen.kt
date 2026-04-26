@@ -68,6 +68,7 @@ fun GoalDetailScreen(
     val snackbar = remember { SnackbarHostState() }
     var showLog by remember { mutableStateOf(false) }
     var showTask by remember { mutableStateOf(false) }
+    var showDistractionDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -105,6 +106,7 @@ fun GoalDetailScreen(
         } else {
             DetailBody(
                 detail = detail,
+                rules = state.distractionRules,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
@@ -112,6 +114,8 @@ fun GoalDetailScreen(
                 onLogClicked = { showLog = true },
                 onAddTask = { showTask = true },
                 onToggleTask = { task -> viewModel.setTaskDone(task.id) },
+                onAddDistraction = { showDistractionDialog = true },
+                onRemoveDistraction = { id -> viewModel.removeDistractionRule(id) },
             )
         }
     }
@@ -135,15 +139,27 @@ fun GoalDetailScreen(
             },
         )
     }
+    if (showDistractionDialog) {
+        AddDistractionDialog(
+            onDismiss = { showDistractionDialog = false },
+            onSubmit = { category, cooldown ->
+                viewModel.addDistractionRule(category, cooldown)
+                showDistractionDialog = false
+            },
+        )
+    }
 }
 
 @Composable
 private fun DetailBody(
     detail: GoalDetail,
+    rules: List<com.buddy.app.data.DistractionRule>,
     modifier: Modifier,
     onLogClicked: () -> Unit,
     onAddTask: () -> Unit,
     onToggleTask: (Task) -> Unit,
+    onAddDistraction: () -> Unit,
+    onRemoveDistraction: (Int) -> Unit,
 ) {
     val goal = detail.goal
     LazyColumn(
@@ -254,6 +270,67 @@ private fun DetailBody(
                             color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium,
                         )
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Distractions",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.TextButton(onClick = onAddDistraction) {
+                    Text("+ Add")
+                }
+            }
+            Text(
+                text = "Categories that count as drift during this goal's focus sessions. Tier 0/1/2 nudges fire if you stay in one for the cooldown.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (rules.isEmpty()) {
+            item {
+                Text(
+                    "(none)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            items(rules, key = { it.id }) { rule ->
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = rule.distractorCategory,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                text = "${rule.cooldownSeconds}s grace",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        androidx.compose.material3.TextButton(
+                            onClick = { onRemoveDistraction(rule.id) }
+                        ) { Text("Remove") }
                     }
                 }
             }
@@ -393,3 +470,62 @@ private fun AddTaskDialog(
 
 private fun formatNumber(d: Double): String =
     if (d == d.toLong().toDouble()) d.toLong().toString() else "%.2f".format(d)
+
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun AddDistractionDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (category: String, cooldownSeconds: Int) -> Unit,
+) {
+    val categories = listOf(
+        "social_media", "video", "music", "communication",
+        "browser", "gaming", "other",
+    )
+    var selected by remember { mutableStateOf(categories.first()) }
+    var cooldownText by remember { mutableStateOf("90") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add distraction") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "When this category is foreground for the cooldown duration during a session for this goal, Tier 0 fires.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    categories.forEach { c ->
+                        AssistChip(
+                            onClick = { selected = c },
+                            label = { Text(c) },
+                            colors = if (c == selected) {
+                                androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    labelColor = MaterialTheme.colorScheme.onPrimary,
+                                )
+                            } else androidx.compose.material3.AssistChipDefaults.assistChipColors(),
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = cooldownText,
+                    onValueChange = { cooldownText = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("Cooldown (seconds, default 90)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSubmit(selected, cooldownText.toIntOrNull() ?: 90)
+            }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
