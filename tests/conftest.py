@@ -29,5 +29,17 @@ def isolated_data_dir(tmp_path, monkeypatch):
     from buddy.config import reload_settings
 
     reload_settings()
+    # Each test gets its own engine + session factory so the in-memory state
+    # doesn't bleed between cases.
+    import buddy.db as buddy_db
+
+    buddy_db._engine = None
+    buddy_db._session_factory = None
     yield
+    buddy_db._engine = None
+    buddy_db._session_factory = None
     reload_settings()
+
+
+# Re-export common test helpers as fixtures.
+from tests._helpers import authed_client, mock_chat, mock_embed  # noqa: E402,F401

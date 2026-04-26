@@ -6,10 +6,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Phase 2: morning + end-of-day alarms and notifications. -->
+    <!-- Phase 2: morning + end-of-day alarms and notifications.
+         Daily prompts use inexact alarms (setAndAllowWhileIdle) so we
+         don't need SCHEDULE_EXACT_ALARM, which is now restricted under
+         Play policy to apps where exact timing is the primary purpose. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Phase 3: focus-session foreground service. -->
@@ -39,7 +40,6 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.Buddy"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -51,7 +51,6 @@
         <activity
             android:name=".capture.CaptureActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:launchMode="singleTask"
             android:theme="@style/Theme.Buddy.Capture"
             android:excludeFromRecents="true"

@@ -4,7 +4,6 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.content.ContextCompat
 import com.buddy.app.data.BuddySettings
 import java.util.Calendar
@@ -47,21 +46,10 @@ object AlarmScheduler {
         val mgr = ContextCompat.getSystemService(context, AlarmManager::class.java) ?: return
         val pi = pendingIntent(context, requestCode, kind)
         val triggerAt = nextOccurrence(hour, minute)
-        val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            mgr.canScheduleExactAlarms()
-        } else {
-            true
-        }
-        try {
-            if (canExact) {
-                mgr.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
-            } else {
-                mgr.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
-            }
-        } catch (_: SecurityException) {
-            // Exact-alarm permission revoked; fall back to inexact.
-            mgr.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
-        }
+        // Inexact (setAndAllowWhileIdle) — Doze can delay by up to ~10 minutes,
+        // which is fine for a morning/evening prompt. Avoids the now-restricted
+        // SCHEDULE_EXACT_ALARM permission.
+        mgr.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
     }
 
     private fun cancelOne(context: Context, requestCode: Int, kind: String) {

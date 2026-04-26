@@ -4,7 +4,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -104,12 +103,8 @@ class FocusSessionService : Service() {
     private fun handleStop() {
         refreshJob?.cancel()
         checkInJob?.cancel()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        // minSdk = 28 ≥ N, so STOP_FOREGROUND_REMOVE is always available.
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
@@ -127,8 +122,12 @@ class FocusSessionService : Service() {
 
     private fun updatePresenceNotification() {
         val notif = buildPresenceNotification()
-        androidx.core.app.NotificationManagerCompat.from(this)
-            .notify(Notifications.NOTIF_ID_FOCUS, notif)
+        try {
+            androidx.core.app.NotificationManagerCompat.from(this)
+                .notify(Notifications.NOTIF_ID_FOCUS, notif)
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS denied; persistent presence is best-effort.
+        }
     }
 
     private fun buildPresenceNotification(): android.app.Notification {
@@ -191,8 +190,12 @@ class FocusSessionService : Service() {
             .setAutoCancel(true)
             .setContentIntent(openApp)
             .build()
-        androidx.core.app.NotificationManagerCompat.from(this)
-            .notify(Notifications.NOTIF_ID_FOCUS_CHECKIN, notif)
+        try {
+            androidx.core.app.NotificationManagerCompat.from(this)
+                .notify(Notifications.NOTIF_ID_FOCUS_CHECKIN, notif)
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS denied; check-in is logged on the backend regardless.
+        }
     }
 
     private suspend fun buildApi(): BuddyApi? {

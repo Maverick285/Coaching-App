@@ -222,10 +222,10 @@ private fun ConfirmingPanel(
     onCancel: () -> Unit,
 ) {
     val classification = state.classification ?: return
-    val initiallySelected = remember(classification) {
-        classification.actions.indices.toMutableSet()
+    val initiallySelected: Set<Int> = remember(classification) {
+        classification.actions.indices.toSet()
     }
-    var selected by remember { mutableStateOf(initiallySelected) }
+    var selected by remember(classification) { mutableStateOf<Set<Int>>(initiallySelected) }
 
     Text(
         text = "Confirm",

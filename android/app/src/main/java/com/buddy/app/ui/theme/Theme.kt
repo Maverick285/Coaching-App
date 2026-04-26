@@ -1,7 +1,6 @@
 package com.buddy.app.ui.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -35,11 +34,10 @@ fun BuddyTheme(content: @Composable () -> Unit) {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             window.statusBarColor = Background.toArgb()
             window.navigationBarColor = Background.toArgb()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                WindowCompat.getInsetsController(window, view).apply {
-                    isAppearanceLightStatusBars = false
-                    isAppearanceLightNavigationBars = false
-                }
+            // minSdk = 28 ≥ M.
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
             }
         }
     }

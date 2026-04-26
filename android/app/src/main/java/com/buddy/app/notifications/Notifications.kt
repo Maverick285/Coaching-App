@@ -22,7 +22,8 @@ object Notifications {
     const val NOTIF_ID_FOCUS_CHECKIN = 201  // each check-in toast
 
     fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        // minSdk = 28, so Build.VERSION_CODES.O is always available.
+        run {
             val mgr = ContextCompat.getSystemService(context, NotificationManager::class.java)
                 ?: return
             if (mgr.getNotificationChannel(CHANNEL_DAILY) == null) {

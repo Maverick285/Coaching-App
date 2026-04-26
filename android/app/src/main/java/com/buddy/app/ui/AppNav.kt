@@ -3,10 +3,10 @@ package com.buddy.app.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +51,7 @@ private data class TopLevelDestination(
 )
 
 private val TopLevelDestinations = listOf(
-    TopLevelDestination(Routes.CHAT, "Chat", Icons.Filled.Chat),
+    TopLevelDestination(Routes.CHAT, "Chat", Icons.AutoMirrored.Filled.Chat),
     TopLevelDestination(Routes.GOALS, "Goals", Icons.Filled.Flag),
     TopLevelDestination(Routes.FOCUS, "Focus", Icons.Filled.CenterFocusStrong),
     TopLevelDestination(Routes.GRADE, "Grade", Icons.Filled.AssignmentTurnedIn),

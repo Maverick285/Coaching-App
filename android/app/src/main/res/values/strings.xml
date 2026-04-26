@@ -37,6 +37,4 @@
     <string name="action_start_focus">Start session</string>
     <string name="action_end_focus">End session</string>
     <string name="hint_focus_intention">e.g. 45 minutes on the runsheet</string>
-    <string name="msg_focus_active">Focus session in progress.</string>
-    <string name="msg_no_focus">No active session.</string>
 </resources>
