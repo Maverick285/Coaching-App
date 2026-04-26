@@ -264,3 +264,57 @@ class JournalEntry(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+
+
+# --- Phase 3: focus sessions, capture ---------------------------------------
+
+
+class FocusSession(Base):
+    __tablename__ = "focus_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    intention: Mapped[str] = mapped_column(Text, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    planned_duration_minutes: Mapped[int] = mapped_column(Integer, default=45, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    state: Mapped[str] = mapped_column(
+        String(16), default="active", nullable=False, index=True
+    )  # active | completed | abandoned
+    summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    interventions_fired: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class FocusCheckIn(Base):
+    __tablename__ = "focus_check_ins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    fired_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    kind: Mapped[str] = mapped_column(
+        String(16), default="presence", nullable=False
+    )  # presence | mid | end | drift
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    user_response: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+
+class CaptureLog(Base):
+    """Audit trail for /capture invocations."""
+
+    __tablename__ = "capture_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    proposed_actions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="manual", nullable=False)

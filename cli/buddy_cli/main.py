@@ -642,6 +642,121 @@ def journal(day) -> None:
     console.print(f"[green]Saved journal for {target}.[/]")
 
 
+# ---- Phase 3: capture + focus -------------------------------------------
+
+
+@cli.command()
+@click.argument("text", nargs=-1, required=True)
+@click.option("--source", default="manual", help="manual | voice | widget")
+def capture(text, source) -> None:
+    """Capture-anywhere. Free-form text → proposed actions → confirm → dispatch."""
+    client, _ = _client()
+    text_str = " ".join(text)
+    r = client.post("/capture", json={"text": text_str, "source": source})
+    r.raise_for_status()
+    data = r.json()
+    actions = data["actions"]
+
+    if not actions:
+        msg = data.get("fallback_message") or "(no actions extracted)"
+        console.print(f"[yellow]{msg}[/]")
+        return
+
+    console.print(Panel(text_str, title="captured", border_style="dim"))
+    for i, a in enumerate(actions, 1):
+        console.print(
+            f"[cyan]{i}.[/] [{a['kind']}] {a['summary']}  "
+            f"[dim](conf {a['confidence']:.2f})[/]"
+        )
+    if not Confirm.ask("Confirm and dispatch?", default=True):
+        console.print("[dim]cancelled[/]")
+        return
+
+    r = client.post(
+        "/capture/confirm",
+        json={"capture_id": data["capture_id"], "actions": actions},
+    )
+    r.raise_for_status()
+    for res in r.json()["results"]:
+        marker = "[green]✓[/]" if res["success"] else "[red]×[/]"
+        suffix = f"  → id {res['created_id']}" if res.get("created_id") else ""
+        console.print(f"  {marker} {res['kind']}: {res['detail']}{suffix}")
+
+
+@cli.group()
+def focus() -> None:
+    """Focus-session control."""
+
+
+@focus.command("start")
+@click.option("--intention", prompt=True)
+@click.option("--minutes", default=45, type=int)
+@click.option("--goal", "goal_id", default=None, type=int)
+def focus_start(intention, minutes, goal_id) -> None:
+    client, _ = _client()
+    r = client.post(
+        "/focus/start",
+        json={
+            "intention": intention,
+            "planned_duration_minutes": minutes,
+            "goal_id": goal_id,
+        },
+    )
+    if r.status_code == 409:
+        console.print(f"[yellow]Already active:[/] {r.json().get('detail')}")
+        return
+    r.raise_for_status()
+    s = r.json()
+    console.print(
+        Panel(
+            f"[bold]{s['intention']}[/]\n\n"
+            f"Session {s['id']} · {s['planned_duration_minutes']} min · started {s['started_at']}",
+            title="focus started",
+            border_style="green",
+        )
+    )
+
+
+@focus.command("active")
+def focus_active() -> None:
+    client, _ = _client()
+    r = client.get("/focus/active")
+    r.raise_for_status()
+    s = r.json().get("session")
+    if s is None:
+        console.print("[dim]no active session[/]")
+        return
+    console.print(
+        f"[bold]{s['intention']}[/] · session {s['id']} · "
+        f"{s['planned_duration_minutes']} min · started {s['started_at']}"
+    )
+
+
+@focus.command("checkin")
+@click.argument("session_id", type=int)
+@click.option("--kind", default="presence", type=click.Choice(["presence", "mid", "end", "drift"]))
+def focus_checkin(session_id, kind) -> None:
+    client, _ = _client()
+    r = client.post(f"/focus/{session_id}/check-in", params={"kind": kind})
+    r.raise_for_status()
+    msg = r.json()["check_in"]["message"]
+    console.print(Panel(msg, title=f"check-in ({kind})", border_style="cyan"))
+
+
+@focus.command("end")
+@click.argument("session_id", type=int)
+@click.option("--summary", default="")
+def focus_end(session_id, summary) -> None:
+    client, _ = _client()
+    r = client.post(
+        f"/focus/{session_id}/end",
+        json={"summary": summary, "state": "completed"},
+    )
+    r.raise_for_status()
+    s = r.json()
+    console.print(f"[green]ended[/] {s['id']} at {s['ended_at']}")
+
+
 def main() -> None:
     cli()
 
