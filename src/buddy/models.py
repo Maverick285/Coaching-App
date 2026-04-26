@@ -386,6 +386,63 @@ class DistractionRule(Base):
     )
 
 
+class BlockedAppRule(Base):
+    """Per-goal: which packages are friction (Tier 3) or hard-blocked
+    (Tier 4) when the goal's session is active.
+
+    Block tier semantics:
+        3 — Friction: 60s overlay with reason field; user can proceed.
+        4 — Hard block: app is force-redirected to launcher until
+            session ends or override is redeemed.
+    """
+
+    __tablename__ = "blocked_app_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    package_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    block_tier: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class OverrideRequest(Base):
+    """One override request: user wants to bypass a Tier 3 / Tier 4 block.
+
+    Lifecycle:
+      pending  → SMS sent to approver with one-time code
+      approved → user entered the code; window of `active_minutes` opens
+      expired  → window closed, blocks resume
+      rejected → approver explicitly denied (Phase 5.5: not yet wired)
+    """
+
+    __tablename__ = "override_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    session_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    goal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    intervention_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    package_name: Mapped[str] = mapped_column(String(256), default="", nullable=False)
+    reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    code: Mapped[str] = mapped_column(String(16), nullable=False)
+    approver_label: Mapped[str] = mapped_column(String(64), default="approver", nullable=False)
+    sms_status: Mapped[str] = mapped_column(
+        String(32), default="pending", nullable=False
+    )  # pending | sent | failed | log_only
+    sms_detail: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, index=True
+    )  # pending | approved | expired | rejected
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    active_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+
+
 class Preference(Base):
     """Tiny key/value store for runtime-mutable user preferences that don't
     fit into PERSONA.md / MEMORY.md (and shouldn't require a restart):
