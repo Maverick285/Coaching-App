@@ -75,6 +75,9 @@ async def update_intervention(
             row.delivered_at = now
         if req.action == "dismissed":
             row.dismissed_at = now
+            # Clear the escalation pointer so the engine's grace-period
+            # check distinguishes user dismissal from tier supersession.
+            row.next_escalation_at = None
         await db.commit()
         await db.refresh(row)
     return _to_out(row)

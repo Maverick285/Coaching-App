@@ -82,7 +82,12 @@ def _episode_duration(
     reports: list[AgentReport], distractor_categories: set[str]
 ) -> tuple[int, str | None, datetime | None]:
     """Walk reports newest→oldest, sum the most recent contiguous run of
-    distractor categories. Returns (seconds, category, last_report_at)."""
+    distractor categories. Returns (seconds, category, last_report_at).
+
+    The agent reports every ~10s with `active_seconds` describing how long
+    its foreground was in that category since the last report; we sum
+    those values across the contiguous tail to get the run length.
+    """
     if not reports:
         return (0, None, None)
     latest = reports[-1]
@@ -90,21 +95,14 @@ def _episode_duration(
         return (0, None, latest.received_at)
     cat = latest.foreground_category
     contiguous_seconds = 0
-    last_at = latest.received_at
-    # Walk backward.
-    prev_received_at = last_at
     for r in reversed(reports):
         if r.foreground_category != cat:
             break
-        # Add the gap between this report and the next-newer one (or 0 for
-        # the first iteration).
-        gap = int((prev_received_at - r.received_at).total_seconds())
-        contiguous_seconds += max(0, gap)
-        prev_received_at = r.received_at
-    # Add the most recent report's "active_seconds" so even one report can
-    # represent the user being in that category for ≥ cooldown.
-    contiguous_seconds += latest.active_seconds
-    return (contiguous_seconds, cat, last_at)
+        # Each report covers `active_seconds` of foreground time. Floor at
+        # 1 so a series of zero-active-seconds reports still adds up to
+        # something visible.
+        contiguous_seconds += max(1, int(r.active_seconds))
+    return (contiguous_seconds, cat, latest.received_at)
 
 
 async def detect_drift_for_session(
@@ -153,6 +151,35 @@ async def _live_drift_intervention(
         .order_by(Intervention.fired_at.desc())
     )
     return rows.scalars().first()
+
+
+async def _was_recently_dismissed(
+    session: AsyncSession,
+    *,
+    focus_session_id: int,
+    reason: str,
+    within_seconds: int,
+) -> bool:
+    """True if any matching intervention was dismissed within the window.
+    Used as a post-dismissal grace period so the engine doesn't immediately
+    re-fire the same drift reason after the user explicitly closed it.
+
+    Tier escalation uses dismissed_at internally to mark "superseded by
+    next tier"; we exclude those by requiring next_escalation_at IS NULL,
+    since escalation supersession sets that field, while a real user
+    dismissal does not.
+    """
+    cutoff = datetime.utcnow() - timedelta(seconds=within_seconds)
+    rows = await session.execute(
+        select(Intervention).where(
+            Intervention.session_id == focus_session_id,
+            Intervention.reason == reason,
+            Intervention.dismissed_at.is_not(None),
+            Intervention.dismissed_at >= cutoff,
+            Intervention.next_escalation_at.is_(None),
+        )
+    )
+    return rows.scalars().first() is not None
 
 
 def _drift_message(tier: int, category: str) -> str:
@@ -266,18 +293,33 @@ async def run_engine_tick(session: AsyncSession) -> TickResult:
         episode = await detect_drift_for_session(session, fs)
         if episode is None:
             # If no drift, mark any live drift intervention as dismissed
-            # (user came back).
+            # (user came back). Clear next_escalation_at so this row is
+            # tagged as a "real" dismissal rather than a tier supersession.
             live = await _live_drift_intervention(
                 session, fs.id, reason_prefix="drift:"
             )
             if live is not None:
                 live.dismissed_at = datetime.utcnow()
+                live.next_escalation_at = None
             continue
+
+        # Post-dismissal grace period: if the user just dismissed the same
+        # drift reason recently, don't immediately re-fire — give them
+        # cooldown_seconds * 2 of room before nagging again.
+        reason = f"drift:{episode.distractor_category}"
+        if await _was_recently_dismissed(
+            session,
+            focus_session_id=fs.id,
+            reason=reason,
+            within_seconds=episode.cooldown_seconds * 2,
+        ):
+            continue
+
         result = await _fire_or_escalate(
             session,
             focus_session_id=fs.id,
             goal_id=fs.goal_id,
-            reason=f"drift:{episode.distractor_category}",
+            reason=reason,
             base_message_for_tier=lambda t: _drift_message(t, episode.distractor_category),
         )
         if result is not None:
