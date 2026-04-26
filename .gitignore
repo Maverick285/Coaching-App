@@ -26,7 +26,8 @@ env/
 .env.local
 
 # Local runtime data (memory + index live under /data in production)
-data/
+# Anchored to project root only — don't accidentally ignore Kotlin `data/` packages.
+/data/
 *.db
 *.db-shm
 *.db-wal

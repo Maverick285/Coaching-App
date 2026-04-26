@@ -1,0 +1,93 @@
+# Buddy — Android client (Phase 1)
+
+Kotlin + Jetpack Compose. Talks to the Phase 0 backend over HTTPS.
+
+## What's in Phase 1
+
+- **Chat screen** with message scrollback, persistent session id (resumes from server-side history on relaunch), and a sending indicator while the assistant is replying.
+- **Voice input** via Android's `SpeechRecognizer` — hold the mic button on the composer to dictate; release to submit. Works offline if the device has offline recognition installed; otherwise online.
+- **Settings screen** for backend URL + bearer token + a "Test connection" button that hits `/health` and reports the resolved models.
+- **Dark Material 3 theme**, edge-to-edge layout.
+- **DataStore Preferences** persists the URL, token, and current session id across launches.
+
+The backend is Phase 0 (the `src/buddy` Python service). The Android app does not duplicate any backend logic — every message round-trip is one `POST /converse` call.
+
+## Building
+
+You need Android Studio Ladybug (or newer) with the Android SDK 34 platform installed.
+
+```bash
+# 1. Open the android/ directory in Android Studio.
+#    First open will trigger a Gradle sync; let it generate gradle/wrapper/gradle-wrapper.jar.
+# 2. Connect a device or start an emulator (API 28+).
+# 3. Run the "app" configuration.
+```
+
+If you prefer the command line and have Gradle 8.10+ installed locally:
+
+```bash
+cd android
+gradle wrapper          # one time only — generates gradle-wrapper.jar
+./gradlew :app:installDebug
+```
+
+## Connecting to the backend
+
+In **Settings**, set:
+
+- **Backend URL** — the full `https://buddy.example.com` (production) or `http://10.0.2.2:8000` (Android emulator → host laptop) or `http://localhost:8000` (after `adb reverse tcp:8000 tcp:8000` on a USB-tethered device).
+- **Auth token** — the value of `BUDDY_AUTH_TOKEN` from the backend's `.env`.
+
+Tap **Test connection**. On success you'll see the resolved models (e.g. `claude-haiku-4-5-20251001, claude-opus-4-7`).
+
+The app uses cleartext HTTP for `localhost`/`10.0.2.2` only via the default debug build's network security config; production builds should always be HTTPS.
+
+## Layout
+
+```
+android/
+├── settings.gradle.kts
+├── build.gradle.kts                  (project plugins)
+├── gradle.properties
+├── gradle/
+│   ├── libs.versions.toml            (version catalog: AGP, Kotlin, Compose, Retrofit…)
+│   └── wrapper/gradle-wrapper.properties
+└── app/
+    ├── build.gradle.kts              (module config; namespace com.buddy.app, minSdk 28, target 34)
+    ├── proguard-rules.pro
+    └── src/main/
+        ├── AndroidManifest.xml       (INTERNET, RECORD_AUDIO, recognition queries)
+        ├── java/com/buddy/app/
+        │   ├── BuddyApplication.kt
+        │   ├── MainActivity.kt
+        │   ├── data/
+        │   │   ├── ApiClient.kt      (Retrofit + OkHttp + bearer-token interceptor)
+        │   │   ├── BuddyApi.kt
+        │   │   ├── ChatRepository.kt
+        │   │   ├── Models.kt         (DTOs mirroring the backend Pydantic schemas)
+        │   │   └── SettingsRepository.kt   (DataStore Preferences)
+        │   ├── ui/
+        │   │   ├── AppNav.kt
+        │   │   ├── chat/             (ChatScreen + ChatViewModel)
+        │   │   ├── settings/         (SettingsScreen + SettingsViewModel)
+        │   │   └── theme/
+        │   └── voice/
+        │       └── SpeechRecognition.kt    (SpeechRecognizer wrapped as a Flow<VoiceEvent>)
+        └── res/
+```
+
+## Phase 1 acceptance
+
+Per the build spec:
+
+> End of Phase 1: the user has a personal AI companion on their phone with persistent memory. This is already useful. Stop and use it for a week before continuing.
+
+That means: install on a real phone, configure backend URL + token, run the persona intake from the CLI (or from the Android app once Phase 2 adds the goals/journal screens), then chat for a week before adding more features.
+
+## Known shortcuts (intentional)
+
+- Cleartext HTTP to `localhost`/`10.0.2.2` works in the debug build because Android's default network security config permits it for those hosts; production should always be HTTPS via Caddy.
+- No streaming yet — `/converse` returns the full response. Phase 2+ may add SSE if latency feels too long for longer outputs.
+- No notifications, no foreground service, no AlarmManager — those are Phase 2's morning/evening prompts.
+- No accessibility service — that's Phase 5's hard-block intervention work.
+- No persona-name fetching from `PERSONA.md` yet; the title bar says "Buddy" generically. Easy follow-up.

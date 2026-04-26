@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Buddy</string>
+
+    <string name="title_chat">Buddy</string>
+    <string name="title_settings">Settings</string>
+
+    <string name="hint_message">Message</string>
+    <string name="action_send">Send</string>
+    <string name="action_voice">Hold to talk</string>
+    <string name="action_new_session">New conversation</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_save">Save</string>
+    <string name="action_test_connection">Test connection</string>
+
+    <string name="label_backend_url">Backend URL</string>
+    <string name="label_auth_token">Auth token</string>
+    <string name="hint_backend_url">https://buddy.example.com</string>
+    <string name="hint_auth_token">Bearer token from your .env</string>
+
+    <string name="msg_settings_required">Set the backend URL and auth token in Settings before chatting.</string>
+    <string name="msg_listening">Listening…</string>
+    <string name="msg_voice_unavailable">Voice recognition isn\'t available on this device.</string>
+    <string name="msg_record_audio_required">Microphone permission is required for voice input.</string>
+    <string name="msg_connection_ok">Connection OK · models: %1$s</string>
+    <string name="msg_connection_failed">Connection failed: %1$s</string>
+</resources>

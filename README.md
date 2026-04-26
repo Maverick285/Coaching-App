@@ -1,8 +1,11 @@
-# Buddy — Phase 0
+# Buddy
 
-Personal AI companion backend. Markdown-based memory, calibrated persona, two-tier LLM routing, nightly consolidation with auto-apply / require-review tiering, accessed from a CLI.
+Personal AI companion. Markdown-based memory, calibrated persona, two-tier LLM routing, nightly consolidation with auto-apply / require-review tiering.
 
-This is **Phase 0** per the build spec — backend-only, no Android client yet.
+- **Phase 0** (backend, this repo's `src/buddy`) — FastAPI + SQLite + sqlite-vec + APScheduler + Anthropic. CLI-accessible.
+- **Phase 1** (Android client, `android/`) — Kotlin + Jetpack Compose. Chat, voice input, settings.
+
+See [`android/README.md`](android/README.md) for the phone client.
 
 ## What works in Phase 0
 
