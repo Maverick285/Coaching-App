@@ -318,3 +318,69 @@ class CaptureLog(Base):
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     dispatched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     source: Mapped[str] = mapped_column(String(32), default="manual", nullable=False)
+
+
+# --- Phase 4: PC agent reports + interventions + distraction rules ---------
+
+
+class AgentReport(Base):
+    """One heartbeat from the PC agent (or the phone's UsageStats)."""
+
+    __tablename__ = "agent_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    session_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    source: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # pc_agent | phone_usage_stats
+    foreground_category: Mapped[str] = mapped_column(String(64), nullable=False)
+    foreground_app_hint: Mapped[str] = mapped_column(String(256), default="", nullable=False)
+    idle_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    active_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class Intervention(Base):
+    """A single intervention fired by the engine.
+
+    Lifecycle:
+        fired_at  → notification dispatched to the device
+        delivered_at  → device acknowledged render
+        dismissed_at  → user tapped dismiss (or session ended)
+        next_escalation_at → if still un-dismissed at this moment, fire the next tier
+    """
+
+    __tablename__ = "interventions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    goal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    tier: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # 0 / 1 / 2
+    fired_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_escalation_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reason: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class DistractionRule(Base):
+    """Per-goal: which categories count as distraction during this goal's
+    sessions, and how long the user can be in that category before the
+    engine fires Tier 0."""
+
+    __tablename__ = "distraction_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    distractor_category: Mapped[str] = mapped_column(String(64), nullable=False)
+    cooldown_seconds: Mapped[int] = mapped_column(Integer, default=90, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
