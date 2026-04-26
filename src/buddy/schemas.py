@@ -19,6 +19,24 @@ class DailyRhythm(BaseModel):
     end_of_day_minute: int
 
 
+class ScheduledJob(BaseModel):
+    id: str
+    next_run_at: str | None = None
+    trigger: str = ""
+
+
+class DiagnosticsBlock(BaseModel):
+    last_consolidation_at: str | None = None
+    last_consolidation_status: str | None = None
+    last_backup_push_at: str | None = None
+    last_backup_push_status: str | None = None
+    last_engine_tick_at: str | None = None
+    last_engine_tick_fired: str | None = None
+    sms_configured: bool = False
+    git_remote_configured: bool = False
+    scheduled_jobs: list[ScheduledJob] = []
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     version: str
@@ -26,6 +44,7 @@ class HealthResponse(BaseModel):
     memory_repo_status: str
     models_resolved: dict[str, str]
     daily_rhythm: DailyRhythm | None = None
+    diagnostics: DiagnosticsBlock | None = None
 
 
 class ProfileResponse(BaseModel):

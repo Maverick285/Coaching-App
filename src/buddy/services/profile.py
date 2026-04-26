@@ -23,6 +23,16 @@ KEY_PERSONA_NAME = "persona_name"
 KEY_TIMEZONE = "timezone"
 KEY_ONBOARDING_COMPLETED_AT = "onboarding_completed_at"
 
+# Diagnostics: most-recent run timestamps + outcomes for the scheduled jobs.
+# These let the Status screen show "last consolidation: 03:14 — ok (2 dreams,
+# 1 review)" without us needing a full event log.
+KEY_LAST_CONSOLIDATION_AT = "last_consolidation_at"
+KEY_LAST_CONSOLIDATION_STATUS = "last_consolidation_status"
+KEY_LAST_BACKUP_PUSH_AT = "last_backup_push_at"
+KEY_LAST_BACKUP_PUSH_STATUS = "last_backup_push_status"
+KEY_LAST_ENGINE_TICK_AT = "last_engine_tick_at"
+KEY_LAST_ENGINE_TICK_FIRED = "last_engine_tick_fired"
+
 
 async def get_pref(session: AsyncSession, key: str) -> str | None:
     row = await session.get(Preference, key)

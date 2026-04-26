@@ -19,6 +19,26 @@ from buddy.memory.store import MemoryStore
 from buddy.services.budget import cap_status
 from buddy.services.grading import compute_day_grade, upsert_day_grade
 from buddy.services.interventions import run_engine_tick, run_floor_check
+from buddy.services.profile import (
+    KEY_LAST_BACKUP_PUSH_AT,
+    KEY_LAST_BACKUP_PUSH_STATUS,
+    KEY_LAST_CONSOLIDATION_AT,
+    KEY_LAST_CONSOLIDATION_STATUS,
+    KEY_LAST_ENGINE_TICK_AT,
+    KEY_LAST_ENGINE_TICK_FIRED,
+    set_pref,
+)
+
+
+async def _record(key_at: str, key_status: str | None, status: str | None) -> None:
+    """Stash a job's last-run timestamp + status in the preferences table
+    so the Status screen can show 'last consolidation: 3:14 AM — ok'."""
+    factory = get_session_factory()
+    async with factory() as db:
+        await set_pref(db, key_at, datetime.utcnow().isoformat())
+        if key_status is not None and status is not None:
+            await set_pref(db, key_status, status)
+        await db.commit()
 
 log = get_logger("buddy.scheduler")
 _scheduler: AsyncIOScheduler | None = None
@@ -28,6 +48,12 @@ async def _consolidation_job() -> None:
     log.info("scheduler.consolidation.start")
     result = await run_consolidation()
     log.info("scheduler.consolidation.done", **result)
+    summary = (
+        f"{result.get('status', 'unknown')}"
+        + (f" · {result['auto_applied']} auto, {result['pending_review']} review"
+           if result.get("status") == "ok" else "")
+    )
+    await _record(KEY_LAST_CONSOLIDATION_AT, KEY_LAST_CONSOLIDATION_STATUS, summary)
 
 
 async def _reconcile_job() -> None:
@@ -45,9 +71,11 @@ async def _budget_job() -> None:
 async def _backup_push_job() -> None:
     settings = get_settings()
     if not settings.git_remote:
+        await _record(KEY_LAST_BACKUP_PUSH_AT, KEY_LAST_BACKUP_PUSH_STATUS, "no remote")
         return
     status = MemoryStore().push_to_remote()
     log.info("scheduler.backup_push", status=status)
+    await _record(KEY_LAST_BACKUP_PUSH_AT, KEY_LAST_BACKUP_PUSH_STATUS, status)
 
 
 async def _day_grade_precompute_job() -> None:
@@ -71,12 +99,15 @@ async def _intervention_engine_tick_job() -> None:
     factory = get_session_factory()
     async with factory() as db:
         result = await run_engine_tick(db)
-    if result.drift_fired or result.floor_fired:
+    fired = len(result.drift_fired) + len(result.floor_fired)
+    if fired:
         log.info(
             "scheduler.engine_tick",
             drift=len(result.drift_fired),
             floor=len(result.floor_fired),
         )
+    # Always record last-tick so the Status screen can confirm it's alive.
+    await _record(KEY_LAST_ENGINE_TICK_AT, KEY_LAST_ENGINE_TICK_FIRED, str(fired))
 
 
 async def _floor_check_job() -> None:

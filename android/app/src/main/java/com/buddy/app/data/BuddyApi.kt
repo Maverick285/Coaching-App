@@ -14,6 +14,9 @@ interface BuddyApi {
     @GET("/health")
     suspend fun health(): HealthResponse
 
+    @GET("/usage")
+    suspend fun usage(): UsageResponse
+
     @POST("/converse")
     suspend fun converse(@Body req: ConverseRequest): ConverseResponse
 

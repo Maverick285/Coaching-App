@@ -15,6 +15,26 @@ data class DailyRhythm(
 )
 
 @Serializable
+data class ScheduledJob(
+    val id: String,
+    @SerialName("next_run_at") val nextRunAt: String? = null,
+    val trigger: String = "",
+)
+
+@Serializable
+data class DiagnosticsBlock(
+    @SerialName("last_consolidation_at") val lastConsolidationAt: String? = null,
+    @SerialName("last_consolidation_status") val lastConsolidationStatus: String? = null,
+    @SerialName("last_backup_push_at") val lastBackupPushAt: String? = null,
+    @SerialName("last_backup_push_status") val lastBackupPushStatus: String? = null,
+    @SerialName("last_engine_tick_at") val lastEngineTickAt: String? = null,
+    @SerialName("last_engine_tick_fired") val lastEngineTickFired: String? = null,
+    @SerialName("sms_configured") val smsConfigured: Boolean = false,
+    @SerialName("git_remote_configured") val gitRemoteConfigured: Boolean = false,
+    @SerialName("scheduled_jobs") val scheduledJobs: List<ScheduledJob> = emptyList(),
+)
+
+@Serializable
 data class HealthResponse(
     val status: String,
     val version: String,
@@ -22,6 +42,27 @@ data class HealthResponse(
     @SerialName("memory_repo_status") val memoryRepoStatus: String,
     @SerialName("models_resolved") val modelsResolved: Map<String, String>,
     @SerialName("daily_rhythm") val dailyRhythm: DailyRhythm? = null,
+    val diagnostics: DiagnosticsBlock? = null,
+)
+
+@Serializable
+data class UsageBucket(
+    val label: String,
+    @SerialName("tokens_in") val tokensIn: Int,
+    @SerialName("tokens_out") val tokensOut: Int,
+    @SerialName("cost_usd") val costUsd: Double,
+)
+
+@Serializable
+data class UsageResponse(
+    val today: UsageBucket,
+    @SerialName("month_to_date") val monthToDate: UsageBucket,
+    @SerialName("last_7_days") val last7Days: UsageBucket,
+    @SerialName("by_model") val byModel: List<UsageBucket> = emptyList(),
+    @SerialName("soft_cap_usd") val softCapUsd: Double,
+    @SerialName("hard_cap_usd") val hardCapUsd: Double,
+    @SerialName("soft_cap_exceeded") val softCapExceeded: Boolean,
+    @SerialName("hard_cap_exceeded") val hardCapExceeded: Boolean,
 )
 
 // --- Converse ---------------------------------------------------------------

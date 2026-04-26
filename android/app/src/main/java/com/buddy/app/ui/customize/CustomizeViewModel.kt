@@ -8,10 +8,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.buddy.app.data.ApiHolder
 import com.buddy.app.data.BuddyApi
+import com.buddy.app.data.HealthResponse
 import com.buddy.app.data.MemoryFileWrite
 import com.buddy.app.data.ProfileResponse
 import com.buddy.app.data.ProfileUpdate
 import com.buddy.app.data.SettingsRepository
+import com.buddy.app.data.UsageResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +35,9 @@ data class CustomizeUiState(
     val editingPath: String? = null,
     val editorContent: String = "",
     val savingFile: Boolean = false,
+    val health: HealthResponse? = null,
+    val healthError: String? = null,
+    val usage: UsageResponse? = null,
     val message: String? = null,
     val error: String? = null,
 )
@@ -61,7 +66,7 @@ class CustomizeViewModel(
     fun refresh() {
         val a = api ?: return
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
+            _state.update { it.copy(loading = true, error = null, healthError = null) }
             try {
                 val profile = a.getProfile()
                 val files = mutableMapOf<String, String>()
@@ -83,6 +88,20 @@ class CustomizeViewModel(
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message) }
+            }
+            // Health + usage are best-effort and parallelized in spirit;
+            // they don't block the rest of the screen.
+            try {
+                val health = a.health()
+                _state.update { it.copy(health = health, healthError = null) }
+            } catch (e: Exception) {
+                _state.update { it.copy(health = null, healthError = e.message ?: "unreachable") }
+            }
+            try {
+                val usage = a.usage()
+                _state.update { it.copy(usage = usage) }
+            } catch (_: Exception) {
+                // Usage is non-fatal — old backends may not have the endpoint.
             }
         }
     }

@@ -25,6 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -43,6 +44,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.buddy.app.data.HealthResponse
+import com.buddy.app.data.UsageResponse
+import com.buddy.app.interventions.UsageStatsReader
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
@@ -124,6 +128,16 @@ fun CustomizeScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // --- Status + spend, surfaced at the top -------------------
+            StatusCard(
+                health = state.health,
+                healthError = state.healthError,
+                context = context,
+            )
+            UsageCard(usage = state.usage)
+
+            HorizontalDivider()
+
             // --- Profile section ---------------------------------------
             SectionHeading("Names")
             OutlinedTextField(
@@ -293,4 +307,251 @@ private fun FileEditor(
             }
         }
     }
+}
+
+@Composable
+private fun StatusCard(
+    health: HealthResponse?,
+    healthError: String?,
+    context: android.content.Context,
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "System status",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+
+            if (healthError != null) {
+                Text(
+                    "Backend: unreachable — $healthError",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                return@Card
+            }
+            if (health == null) {
+                Text(
+                    "Backend: checking…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                return@Card
+            }
+
+            val ok = health.status == "ok"
+            StatusRow(
+                label = "Backend",
+                value = "${health.status} · v${health.version}",
+                good = ok,
+            )
+            StatusRow(
+                label = "Models",
+                value = health.modelsResolved.values.joinToString(),
+                good = health.modelsResolved.isNotEmpty() && !health.modelsResolved.containsKey("error"),
+            )
+            StatusRow(
+                label = "Memory repo",
+                value = health.memoryRepoStatus,
+                good = !health.memoryRepoStatus.startsWith("error"),
+            )
+
+            // --- Permissions (phone-side) -----------------------------
+            val accessibilityOn = isAccessibilityEnabled(context)
+            val usageStatsOn = UsageStatsReader.hasPermission(context)
+            val notifsOn = areNotificationsEnabled(context)
+
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Permissions",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            StatusRow(label = "Notifications", value = if (notifsOn) "granted" else "missing", good = notifsOn)
+            StatusRow(label = "Usage access (phone drift)", value = if (usageStatsOn) "granted" else "missing", good = usageStatsOn)
+            StatusRow(label = "Accessibility (T3/T4 blocks)", value = if (accessibilityOn) "granted" else "not granted", good = accessibilityOn)
+
+            // --- Scheduler diagnostics --------------------------------
+            health.diagnostics?.let { d ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Background jobs",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                d.lastConsolidationAt?.let {
+                    StatusRow(
+                        label = "Last consolidation",
+                        value = "${formatIso(it)} · ${d.lastConsolidationStatus.orEmpty()}",
+                        good = d.lastConsolidationStatus?.startsWith("ok") == true,
+                    )
+                } ?: StatusRow(label = "Last consolidation", value = "never run", good = null)
+
+                d.lastBackupPushAt?.let {
+                    StatusRow(
+                        label = "Last backup push",
+                        value = "${formatIso(it)} · ${d.lastBackupPushStatus.orEmpty()}",
+                        good = d.lastBackupPushStatus == "pushed",
+                    )
+                } ?: StatusRow(
+                    label = "Backup push",
+                    value = if (d.gitRemoteConfigured) "never run" else "no remote configured",
+                    good = null,
+                )
+
+                d.lastEngineTickAt?.let {
+                    StatusRow(
+                        label = "Drift engine tick",
+                        value = "${formatIso(it)} · fired ${d.lastEngineTickFired.orEmpty()}",
+                        good = true,
+                    )
+                }
+
+                if (d.scheduledJobs.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Next runs",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    d.scheduledJobs.forEach { job ->
+                        StatusRow(
+                            label = job.id,
+                            value = job.nextRunAt?.let(::formatIso) ?: "(unscheduled)",
+                            good = null,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsageCard(usage: UsageResponse?) {
+    if (usage == null) return
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "API spend",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+
+            val mtd = usage.monthToDate.costUsd
+            val soft = usage.softCapUsd.coerceAtLeast(0.01)
+            val ratio = (mtd / soft).coerceIn(0.0, 2.0).toFloat()
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "$%.2f".format(mtd),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = if (usage.hardCapExceeded) MaterialTheme.colorScheme.error
+                        else if (usage.softCapExceeded) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    text = "month-to-date",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            LinearProgressIndicator(
+                progress = { ratio.coerceAtMost(1f) },
+                modifier = Modifier.fillMaxWidth(),
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+            Text(
+                text = "Soft cap $%.0f · Hard cap $%.0f".format(usage.softCapUsd, usage.hardCapUsd),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (usage.hardCapExceeded) {
+                Text(
+                    "Hard cap reached — /converse returns 503 until next month or you raise BUDDY_BUDGET_HARD_USD.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else if (usage.softCapExceeded) {
+                Text(
+                    "Soft cap exceeded. Operations continue; consider tightening if this surprises you.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Today $%.2f".format(usage.today.costUsd),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "7-day $%.2f".format(usage.last7Days.costUsd),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusRow(label: String, value: String, good: Boolean?) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = when (good) {
+                true -> MaterialTheme.colorScheme.onSurface
+                false -> MaterialTheme.colorScheme.error
+                null -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}
+
+private fun isAccessibilityEnabled(context: android.content.Context): Boolean {
+    return try {
+        val expected = "${context.packageName}/com.buddy.app.blocking.BuddyAccessibilityService"
+        val enabled = android.provider.Settings.Secure.getString(
+            context.contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+        ) ?: ""
+        enabled.split(":").any { it.equals(expected, ignoreCase = true) }
+    } catch (_: Exception) {
+        false
+    }
+}
+
+private fun areNotificationsEnabled(context: android.content.Context): Boolean =
+    androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+private fun formatIso(iso: String): String = try {
+    // Server returns naive UTC ISO. Render as 'MMM d, HH:mm' in local TZ
+    // for the most-recent occurrence the user cares about.
+    val instant = if (iso.endsWith("Z") || iso.contains("+")) {
+        java.time.OffsetDateTime.parse(iso).toInstant()
+    } else {
+        java.time.LocalDateTime.parse(iso).toInstant(java.time.ZoneOffset.UTC)
+    }
+    java.time.ZonedDateTime.ofInstant(instant, java.time.ZoneId.systemDefault())
+        .format(java.time.format.DateTimeFormatter.ofPattern("MMM d, HH:mm"))
+} catch (_: Exception) {
+    iso
 }
