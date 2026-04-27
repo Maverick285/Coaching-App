@@ -205,9 +205,20 @@ class OnboardingViewModel(
     // ---- Intake step ---------------------------------------------------
 
     fun startIntake() {
-        val a = api ?: return
         viewModelScope.launch {
             _state.update { it.copy(intakeSubmitting = true, error = null) }
+            // Wait briefly for the BuddyApi to be built from the
+            // backend URL/token flow. Without this, the LaunchedEffect
+            // can fire before api is populated and silently no-op.
+            val a = waitForApi() ?: run {
+                _state.update {
+                    it.copy(
+                        intakeSubmitting = false,
+                        error = "Backend client not ready. Check connection and retry.",
+                    )
+                }
+                return@launch
+            }
             try {
                 val resp = a.intakeStart()
                 _state.update {
@@ -228,6 +239,14 @@ class OnboardingViewModel(
                 _state.update { it.copy(intakeSubmitting = false, error = e.message) }
             }
         }
+    }
+
+    private suspend fun waitForApi(timeoutMs: Long = 5000): BuddyApi? {
+        val start = System.currentTimeMillis()
+        while (api == null && System.currentTimeMillis() - start < timeoutMs) {
+            kotlinx.coroutines.delay(50)
+        }
+        return api
     }
 
     fun setAnswerText(value: String) =

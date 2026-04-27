@@ -225,8 +225,25 @@ private fun IntakeStep(state: OnboardingUiState, vm: OnboardingViewModel) {
             Text("Skip without finalizing")
         }
     } else {
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+        if (state.error != null) {
+            Text(
+                text = "Couldn't start the persona intake: ${state.error}",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = vm::startIntake, modifier = Modifier.weight(1f)) {
+                    Text("Retry")
+                }
+                OutlinedButton(onClick = vm::skipIntake, modifier = Modifier.weight(1f)) {
+                    Text("Skip for now")
+                }
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
         }
     }
 }

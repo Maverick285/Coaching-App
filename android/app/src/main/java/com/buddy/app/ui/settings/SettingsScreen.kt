@@ -107,9 +107,44 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Backend URL + auth token are baked into the build. No
-            // user-facing controls — change them by rebuilding with new
-            // values in android/local.properties.
+            // Diagnostics: shows what URL + token (last 6 chars) the
+            // app is actually using. If a request is 401-ing, this is
+            // the first place to look — the values shown are exactly
+            // what's going out on the wire.
+            Text(
+                "Diagnostics",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "Backend: ${state.backendUrl.ifBlank { "(none)" }}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Token: …${state.authToken.takeLast(6).ifBlank { "(none)" }}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = {
+                    viewModel.testConnection(
+                        formatOk = { models -> "OK · models: $models" },
+                        formatErr = { err -> "Failed: $err" },
+                    )
+                },
+                enabled = !state.testing,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (state.testing) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                }
+                Text("Test backend connection")
+            }
 
             state.statusMessage?.let { message ->
                 Text(
