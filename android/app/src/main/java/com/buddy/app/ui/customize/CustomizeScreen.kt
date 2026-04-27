@@ -29,6 +29,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -154,6 +155,29 @@ fun CustomizeScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            HorizontalDivider()
+
+            // --- Model tier --------------------------------------------
+            SectionHeading("Model")
+            Text(
+                "Auto picks the cheap fast model for routine chat and the reasoning model when you ask for planning. Pin it if you want one or the other.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    "auto" to "Auto",
+                    "reasoning" to "Reasoning",
+                    "fast" to "Fast",
+                ).forEach { (id, label) ->
+                    FilterChip(
+                        selected = state.chatTierInput == id,
+                        onClick = { viewModel.setChatTier(id) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+
             Button(
                 onClick = viewModel::saveProfile,
                 enabled = !state.savingProfile,
@@ -163,18 +187,19 @@ fun CustomizeScreen(
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.size(6.dp))
                 }
-                Text("Save names")
+                Text("Save")
             }
 
             HorizontalDivider()
 
             // --- Memory files ----------------------------------------
-            SectionHeading("Memory")
-            Text(
-                "These files are the persona's spec and what it knows about you. Edit anything; the change applies on the next conversation.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SectionHeading("Memory")
+                com.buddy.app.ui.common.InfoTooltip(
+                    title = "Memory files",
+                    body = "PERSONA.md is the persona's behavior spec. MEMORY.md is what it knows about you. PATTERNS.md is the running list of patterns observed. Edit anything; changes apply on the next conversation.",
+                )
+            }
             CUSTOMIZABLE_MEMORY_FILES.forEach { path ->
                 MemoryRow(
                     path = path,
@@ -211,20 +236,20 @@ fun CustomizeScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Notification settings") }
 
-            OutlinedButton(
-                onClick = {
-                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Grant accessibility (Tier 3 / Tier 4 blocks)") }
-
-            Text(
-                "Buddy's accessibility service only reads which app is foregrounded — no screen content, no keystrokes, no text. Required only if you've added Tier 3 or Tier 4 blocked apps to a goal.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = {
+                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("Grant accessibility") }
+                com.buddy.app.ui.common.InfoTooltip(
+                    title = "Accessibility access",
+                    body = "Used only for Tier 3 / Tier 4 blocks. Buddy's service reads which app is foregrounded — no screen content, no keystrokes, no text. Skip this unless you've added blocked apps to a goal.",
+                )
+            }
         }
     }
 }

@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -120,6 +122,12 @@ fun ChatScreen(
         state.error?.let {
             snackbar.showSnackbar(it)
             viewModel.onClearError()
+        }
+    }
+    LaunchedEffect(state.info) {
+        state.info?.let {
+            snackbar.showSnackbar(it)
+            viewModel.onClearInfo()
         }
     }
 
@@ -362,6 +370,8 @@ private fun Composer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .imePadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.Bottom,
         ) {

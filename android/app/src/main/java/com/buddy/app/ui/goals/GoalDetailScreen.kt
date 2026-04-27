@@ -15,17 +15,24 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -34,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,8 +56,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.buddy.app.data.Goal
 import com.buddy.app.data.GoalDetail
+import com.buddy.app.data.GoalUpdate
 import com.buddy.app.data.Task
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +84,9 @@ fun GoalDetailScreen(
     var showTask by remember { mutableStateOf(false) }
     var showDistractionDialog by remember { mutableStateOf(false) }
     var showBlockedAppDialog by remember { mutableStateOf(false) }
+    var showEdit by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -85,6 +102,50 @@ fun GoalDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showEdit = true }) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit goal")
+                    }
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        val currentState = state.detail?.goal?.state
+                        if (currentState == "active") {
+                            DropdownMenuItem(
+                                text = { Text("Pause") },
+                                onClick = {
+                                    menuOpen = false
+                                    viewModel.updateGoal(GoalUpdate(state = "paused"))
+                                },
+                            )
+                        } else if (currentState == "paused") {
+                            DropdownMenuItem(
+                                text = { Text("Resume") },
+                                onClick = {
+                                    menuOpen = false
+                                    viewModel.updateGoal(GoalUpdate(state = "active"))
+                                },
+                            )
+                        }
+                        if (currentState != "completed") {
+                            DropdownMenuItem(
+                                text = { Text("Mark complete") },
+                                onClick = {
+                                    menuOpen = false
+                                    viewModel.updateGoal(GoalUpdate(state = "completed"))
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Delete…") },
+                            onClick = {
+                                menuOpen = false
+                                confirmDelete = true
+                            },
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -160,6 +221,162 @@ fun GoalDetailScreen(
                 showBlockedAppDialog = false
             },
         )
+    }
+    if (showEdit) {
+        state.detail?.goal?.let { g ->
+            EditGoalSheet(
+                goal = g,
+                onDismiss = { showEdit = false },
+                onSave = { update ->
+                    viewModel.updateGoal(update)
+                    showEdit = false
+                },
+            )
+        }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete this goal?") },
+            text = { Text("Progress logs and tasks under it will be cleaned up. This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    viewModel.deleteGoal { onBack() }
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun EditGoalSheet(
+    goal: Goal,
+    onDismiss: () -> Unit,
+    onSave: (GoalUpdate) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var statement by remember { mutableStateOf(goal.statement) }
+    var paceUnit by remember { mutableStateOf(goal.paceTargetUnit) }
+    var paceAmount by remember {
+        mutableStateOf(if (goal.paceTargetAmount > 0) formatNumber(goal.paceTargetAmount) else "")
+    }
+    var paceDescription by remember { mutableStateOf(goal.paceTargetDescription) }
+    var mvp by remember { mutableStateOf(goal.mvpThreshold) }
+    var priority by remember { mutableStateOf(goal.priority) }
+    var approach by remember { mutableStateOf(goal.approach) }
+    var ceiling by remember { mutableStateOf(goal.interventionCeiling) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .imePadding()
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Edit goal", style = MaterialTheme.typography.titleLarge)
+            OutlinedTextField(
+                value = statement,
+                onValueChange = { statement = it },
+                label = { Text("Statement") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = paceAmount,
+                    onValueChange = { paceAmount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    label = { Text("Amount") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = paceUnit,
+                    onValueChange = { paceUnit = it },
+                    label = { Text("Unit") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            OutlinedTextField(
+                value = paceDescription,
+                onValueChange = { paceDescription = it },
+                label = { Text("Pace description") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = mvp,
+                onValueChange = { mvp = it },
+                label = { Text("No-zero floor") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("Priority", style = MaterialTheme.typography.titleMedium)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                (1..5).forEach { n ->
+                    FilterChip(
+                        selected = priority == n,
+                        onClick = { priority = n },
+                        label = { Text("$n") },
+                    )
+                }
+            }
+            Text("Coaching tone", style = MaterialTheme.typography.titleMedium)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    "user_driven" to "I drive",
+                    "hybrid" to "Hybrid",
+                    "system_assisted" to "Push me",
+                ).forEach { (id, label) ->
+                    FilterChip(
+                        selected = approach == id,
+                        onClick = { approach = id },
+                        label = { Text(label) },
+                    )
+                }
+            }
+            Text("Intervention ceiling", style = MaterialTheme.typography.titleMedium)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                (0..4).forEach { n ->
+                    FilterChip(
+                        selected = ceiling == n,
+                        onClick = { ceiling = n },
+                        label = { Text("T$n") },
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = {
+                        onSave(
+                            GoalUpdate(
+                                statement = statement.trim(),
+                                priority = priority,
+                                paceTargetAmount = paceAmount.toDoubleOrNull() ?: 0.0,
+                                paceTargetUnit = paceUnit.trim(),
+                                paceTargetDescription = paceDescription.trim(),
+                                mvpThreshold = mvp.trim(),
+                                approach = approach,
+                                interventionCeiling = ceiling,
+                            )
+                        )
+                    },
+                    enabled = statement.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) { Text("Save") }
+            }
+        }
     }
 }
 
@@ -302,15 +519,14 @@ private fun DetailBody(
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f),
                 )
+                com.buddy.app.ui.common.InfoTooltip(
+                    title = "Distractions",
+                    body = "Categories that count as drift during this goal's focus sessions. Tier 0/1/2 nudges fire if you stay in one for the cooldown duration.",
+                )
                 androidx.compose.material3.TextButton(onClick = onAddDistraction) {
                     Text("+ Add")
                 }
             }
-            Text(
-                text = "Categories that count as drift during this goal's focus sessions. Tier 0/1/2 nudges fire if you stay in one for the cooldown.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
         if (rules.isEmpty()) {
             item {
@@ -363,15 +579,14 @@ private fun DetailBody(
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f),
                 )
+                com.buddy.app.ui.common.InfoTooltip(
+                    title = "Blocked apps",
+                    body = "Tier 3 = 60-second friction screen before opening. Tier 4 = redirect to home; override required. Needs accessibility access; grant from Customize.",
+                )
                 androidx.compose.material3.TextButton(onClick = onAddBlockedApp) {
                     Text("+ Add")
                 }
             }
-            Text(
-                text = "Tier 3 = 60-second friction screen. Tier 4 = redirect to home + override required. Needs accessibility access; grant from Customize.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
         if (blockedApps.isEmpty()) {
             item {
@@ -563,15 +778,17 @@ private fun AddDistractionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add distraction") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Add distraction", modifier = Modifier.weight(1f))
+                com.buddy.app.ui.common.InfoTooltip(
+                    title = "Distraction rule",
+                    body = "When this category is foreground for the cooldown duration during a session for this goal, Tier 0 fires.",
+                )
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "When this category is foreground for the cooldown duration during a session for this goal, Tier 0 fires.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(4.dp))
                 androidx.compose.foundation.layout.FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -618,15 +835,17 @@ private fun AddBlockedAppDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Block an app") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Block an app", modifier = Modifier.weight(1f))
+                com.buddy.app.ui.common.InfoTooltip(
+                    title = "Block tiers",
+                    body = "Tier 3 = friction (60s pause before opening). Tier 4 = hard block (redirect home; override required). Find package names with: adb shell pm list packages | grep <vendor>.",
+                )
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Tier 3 = friction (60s pause). Tier 4 = hard block (redirect home; override required). " +
-                        "Find package names with `adb shell pm list packages | grep <vendor>`.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 OutlinedTextField(
                     value = pkg,
                     onValueChange = { pkg = it.trim() },

@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -83,7 +85,8 @@ fun JournalScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             OutlinedTextField(
@@ -93,7 +96,7 @@ fun JournalScreen(
                 placeholder = { Text("Anything worth remembering. Empty is fine.") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp),
+                    .heightIn(min = 120.dp, max = 240.dp),
                 maxLines = 16,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

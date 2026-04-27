@@ -16,10 +16,12 @@ from buddy.db import get_session_factory
 from buddy.memory.store import MemoryStore
 from buddy.schemas import ProfileResponse, ProfileUpdate
 from buddy.services.profile import (
+    KEY_CHAT_TIER,
     KEY_PERSONA_NAME,
     KEY_TIMEZONE,
     KEY_USER_NAME,
     is_onboarded,
+    resolve_chat_tier,
     resolve_persona_name,
     resolve_timezone,
     resolve_user_name,
@@ -48,6 +50,7 @@ async def get_profile() -> ProfileResponse:
         user = await resolve_user_name(db)
         persona = await resolve_persona_name(db)
         tz = await resolve_timezone(db)
+        chat_tier = await resolve_chat_tier(db)
 
     store = MemoryStore()
     has_persona = False
@@ -64,6 +67,7 @@ async def get_profile() -> ProfileResponse:
         onboarding_complete=await is_onboarded(),
         has_persona_md=has_persona,
         has_memory_md=has_memory,
+        chat_tier=chat_tier,  # type: ignore[arg-type]
     )
 
 
@@ -81,5 +85,7 @@ async def update_profile(req: ProfileUpdate) -> ProfileResponse:
             await set_pref(db, KEY_PERSONA_NAME, req.persona_name.strip())
         if req.timezone is not None:
             await set_pref(db, KEY_TIMEZONE, req.timezone.strip())
+        if req.chat_tier is not None:
+            await set_pref(db, KEY_CHAT_TIER, req.chat_tier)
         await db.commit()
     return await get_profile()

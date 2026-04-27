@@ -282,6 +282,31 @@ class GoalDetailViewModel(
         }
     }
 
+    fun updateGoal(update: com.buddy.app.data.GoalUpdate, onDone: () -> Unit = {}) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                r.updateGoal(goalId, update)
+                refresh()
+                onDone()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    fun deleteGoal(onDone: () -> Unit) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                r.api.deleteGoal(goalId)
+                onDone()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
     fun onClearError() {
         _state.update { it.copy(error = null) }
     }

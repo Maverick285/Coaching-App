@@ -54,12 +54,14 @@ class ProfileResponse(BaseModel):
     onboarding_complete: bool
     has_persona_md: bool
     has_memory_md: bool
+    chat_tier: Literal["auto", "fast", "reasoning"] = "auto"
 
 
 class ProfileUpdate(BaseModel):
     user_name: str | None = None
     persona_name: str | None = None
     timezone: str | None = None
+    chat_tier: Literal["auto", "fast", "reasoning"] | None = None
 
 
 # --- Converse -------------------------------------------------------------

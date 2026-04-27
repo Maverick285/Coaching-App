@@ -122,6 +122,7 @@ data class ProfileResponse(
     @SerialName("onboarding_complete") val onboardingComplete: Boolean,
     @SerialName("has_persona_md") val hasPersonaMd: Boolean,
     @SerialName("has_memory_md") val hasMemoryMd: Boolean,
+    @SerialName("chat_tier") val chatTier: String = "auto",
 )
 
 @Serializable
@@ -129,6 +130,7 @@ data class ProfileUpdate(
     @SerialName("user_name") val userName: String? = null,
     @SerialName("persona_name") val personaName: String? = null,
     val timezone: String? = null,
+    @SerialName("chat_tier") val chatTier: String? = null,
 )
 
 // --- Persona intake (in-app flow) -----------------------------------------

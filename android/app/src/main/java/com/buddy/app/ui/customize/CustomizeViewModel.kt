@@ -30,6 +30,7 @@ data class CustomizeUiState(
     val profile: ProfileResponse? = null,
     val userNameInput: String = "",
     val personaNameInput: String = "",
+    val chatTierInput: String = "auto",  // auto | fast | reasoning
     val savingProfile: Boolean = false,
     val files: Map<String, String> = emptyMap(),     // path → content
     val editingPath: String? = null,
@@ -83,6 +84,7 @@ class CustomizeViewModel(
                         profile = profile,
                         userNameInput = profile.userName,
                         personaNameInput = profile.personaName,
+                        chatTierInput = profile.chatTier,
                         files = files,
                     )
                 }
@@ -115,6 +117,11 @@ class CustomizeViewModel(
     fun setPersonaName(value: String) =
         _state.update { it.copy(personaNameInput = value) }
 
+    fun setChatTier(value: String) {
+        if (value !in setOf("auto", "fast", "reasoning")) return
+        _state.update { it.copy(chatTierInput = value) }
+    }
+
     fun saveProfile() {
         val a = api ?: return
         val s = _state.value
@@ -125,13 +132,15 @@ class CustomizeViewModel(
                     ProfileUpdate(
                         userName = s.userNameInput.trim(),
                         personaName = s.personaNameInput.trim(),
+                        chatTier = s.chatTierInput,
                     )
                 )
                 _state.update {
                     it.copy(
                         savingProfile = false,
                         profile = updated,
-                        message = "Profile saved.",
+                        chatTierInput = updated.chatTier,
+                        message = "Saved.",
                     )
                 }
             } catch (e: Exception) {

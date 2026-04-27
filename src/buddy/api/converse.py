@@ -22,13 +22,14 @@ from buddy.config import get_settings
 from buddy.db import get_session_factory
 from buddy.llm.client import chat
 from buddy.llm.models import ModelTier, resolve_model
-from buddy.llm.prompts.persona import build_persona_system_prompt
+from buddy.llm.prompts.persona import build_persona_system_prompt, render_goals_block
 from buddy.llm.router import select_tier
 from buddy.memory.retrieval import assemble_context
 from buddy.memory.store import MemoryStore
 from buddy.models import ApiUsage, Conversation, ConversationMessage
 from buddy.schemas import ConverseRequest, ConverseResponse, MemoryLoadedItem
 from buddy.services.budget import enforce_budget
+from buddy.services.grading import active_goals, progress_for_goal
 
 router = APIRouter()
 
@@ -66,12 +67,21 @@ async def converse(req: ConverseRequest) -> ConverseResponse:
         ).scalars().all()
         history = list(reversed(rows))
 
-    # 2. Assemble memory context.
+    # 2. Assemble memory context + load active goals with today's progress.
     store = MemoryStore()
     ctx = await assemble_context(user_message=req.message, store=store)
 
+    today = datetime.utcnow().date()
+    async with factory() as db:
+        goals = await active_goals(db)
+        goals_with_progress = [
+            (g, await progress_for_goal(db, g.id, today)) for g in goals
+        ]
+    goals_block = render_goals_block(goals_with_progress)
+
     # 3. Build the persona system prompt with resolved profile fields.
     from buddy.services.profile import (
+        resolve_chat_tier,
         resolve_persona_name,
         resolve_timezone,
         resolve_user_name,
@@ -80,15 +90,23 @@ async def converse(req: ConverseRequest) -> ConverseResponse:
     user_name = await resolve_user_name()
     persona_name = await resolve_persona_name()
     timezone = await resolve_timezone()
+    chat_tier_pref = await resolve_chat_tier()
     system_prompt = build_persona_system_prompt(
         retrieved=ctx,
         user_name=user_name,
         persona_name=persona_name,
         timezone=timezone,
+        goals_block=goals_block,
     )
 
-    # 4. Route + call.
+    # 4. Route + call. The user's chat_tier preference pins the tier unless
+    # they've explicitly forced reasoning on this turn.
     tier = select_tier(message=req.message, force_reasoning=req.force_reasoning_tier)
+    if not req.force_reasoning_tier:
+        if chat_tier_pref == "reasoning":
+            tier = ModelTier.REASONING
+        elif chat_tier_pref == "fast":
+            tier = ModelTier.FAST
     model = resolve_model(tier)
 
     messages: list[dict] = [

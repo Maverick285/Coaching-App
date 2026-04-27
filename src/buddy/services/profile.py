@@ -23,6 +23,11 @@ KEY_PERSONA_NAME = "persona_name"
 KEY_TIMEZONE = "timezone"
 KEY_ONBOARDING_COMPLETED_AT = "onboarding_completed_at"
 
+# Chat tier preference. Allowed: "auto" (router heuristics), "fast" (always
+# the FAST tier), "reasoning" (always REASONING). Defaults to "auto" if unset.
+KEY_CHAT_TIER = "chat_tier"
+ALLOWED_CHAT_TIERS = {"auto", "fast", "reasoning"}
+
 # Diagnostics: most-recent run timestamps + outcomes for the scheduled jobs.
 # These let the Status screen show "last consolidation: 03:14 — ok (2 dreams,
 # 1 review)" without us needing a full event log.
@@ -88,6 +93,17 @@ async def resolve_timezone(session: AsyncSession | None = None) -> str:
     async with factory() as s:
         v = await get_pref(s, KEY_TIMEZONE)
     return v or settings.timezone
+
+
+async def resolve_chat_tier(session: AsyncSession | None = None) -> str:
+    """Return the user's chat-tier preference; defaults to 'auto'."""
+    if session is not None:
+        v = await get_pref(session, KEY_CHAT_TIER)
+        return v if v in ALLOWED_CHAT_TIERS else "auto"
+    factory = get_session_factory()
+    async with factory() as s:
+        v = await get_pref(s, KEY_CHAT_TIER)
+    return v if v in ALLOWED_CHAT_TIERS else "auto"
 
 
 async def is_onboarded() -> bool:

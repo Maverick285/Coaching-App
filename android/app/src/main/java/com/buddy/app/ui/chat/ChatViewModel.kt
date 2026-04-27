@@ -35,6 +35,7 @@ data class ChatUiState(
     val isListening: Boolean = false,
     val partialTranscript: String = "",
     val error: String? = null,
+    val info: String? = null,
 )
 
 class ChatViewModel(
@@ -108,11 +109,22 @@ class ChatViewModel(
         _state.update { it.copy(error = null) }
     }
 
+    fun onClearInfo() {
+        _state.update { it.copy(info = null) }
+    }
+
     fun startNewSession() {
         viewModelScope.launch {
             settings.clearSessionId()
             sessionId = null
-            _state.update { it.copy(messages = emptyList(), composerText = "", error = null) }
+            _state.update {
+                it.copy(
+                    messages = emptyList(),
+                    composerText = "",
+                    error = null,
+                    info = "Started a new session.",
+                )
+            }
         }
     }
 
