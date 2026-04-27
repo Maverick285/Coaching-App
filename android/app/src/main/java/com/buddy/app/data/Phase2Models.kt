@@ -92,6 +92,29 @@ data class TaskUpdate(
     val state: String? = null,
     val description: String? = null,
     @SerialName("first_60_seconds") val first60Seconds: String? = null,
+    @SerialName("scheduled_at") val scheduledAt: String? = null,
+    @SerialName("estimated_duration_minutes") val estimatedDurationMinutes: Int? = null,
+)
+
+@Serializable
+data class TaskBatchNLRequest(
+    val text: String,
+    val source: String = "text",
+)
+
+@Serializable
+data class TaskBatchOpResult(
+    val op: String,
+    val status: String,
+    @SerialName("task_id") val taskId: Int? = null,
+    val detail: String = "",
+)
+
+@Serializable
+data class TaskBatchNLResponse(
+    @SerialName("parsed_ops") val parsedOps: List<kotlinx.serialization.json.JsonObject> = emptyList(),
+    val results: List<TaskBatchOpResult> = emptyList(),
+    @SerialName("raw_text") val rawText: String = "",
 )
 
 @Serializable

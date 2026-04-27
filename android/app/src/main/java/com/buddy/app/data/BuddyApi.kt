@@ -60,6 +60,9 @@ interface BuddyApi {
     @DELETE("/tasks/{id}")
     suspend fun deleteTask(@Path("id") id: Int)
 
+    @POST("/tasks/batch_nl")
+    suspend fun tasksBatchNL(@Body req: TaskBatchNLRequest): TaskBatchNLResponse
+
     // --- Intentions --------------------------------------------------------
 
     @POST("/intentions")

@@ -26,6 +26,7 @@ from buddy.api import memory as memory_api
 from buddy.api import overrides as overrides_api
 from buddy.api import profile as profile_api
 from buddy.api import progress as progress_api
+from buddy.api import tasks_nl as tasks_nl_api
 from buddy.api import usage as usage_api
 from buddy.logging_setup import configure_logging, get_logger
 from buddy.memory.index import reconcile_index
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(usage_api.router)
     # Phase 2 routes.
     app.include_router(goals_api.router)
+    app.include_router(tasks_nl_api.router)
     app.include_router(progress_api.router)
     app.include_router(grade_api.router)
     app.include_router(journal_api.router)

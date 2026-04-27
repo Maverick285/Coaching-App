@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,10 +34,12 @@ import com.buddy.app.ui.grade.GradeScreen
 import com.buddy.app.ui.journal.JournalScreen
 import com.buddy.app.ui.onboarding.OnboardingScreen
 import com.buddy.app.ui.settings.SettingsScreen
+import com.buddy.app.ui.tasks.TasksScreen
 
 object Routes {
     const val ONBOARDING = "onboarding"
     const val CHAT = "chat"
+    const val TASKS = "tasks"
     const val GOALS = "goals"
     const val FOCUS = "focus"
     const val GRADE = "grade"
@@ -55,17 +57,17 @@ private data class TopLevelDestination(
 )
 
 private val TopLevelDestinations = listOf(
+    TopLevelDestination(Routes.TASKS, "Tasks", Icons.Filled.Checklist),
     TopLevelDestination(Routes.CHAT, "Chat", Icons.AutoMirrored.Filled.Chat),
     TopLevelDestination(Routes.GOALS, "Goals", Icons.Filled.Flag),
     TopLevelDestination(Routes.FOCUS, "Focus", Icons.Filled.CenterFocusStrong),
-    TopLevelDestination(Routes.GRADE, "Grade", Icons.Filled.AssignmentTurnedIn),
     TopLevelDestination(Routes.JOURNAL, "Journal", Icons.AutoMirrored.Filled.MenuBook),
 )
 
 @Composable
 fun AppNavGraph(
     navController: NavHostController = rememberNavController(),
-    startRoute: String = Routes.CHAT,
+    startRoute: String = Routes.TASKS,
 ) {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -127,6 +129,7 @@ fun AppNavGraph(
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable(Routes.TASKS) { TasksScreen() }
             composable(Routes.FOCUS) { FocusScreen() }
             composable(Routes.GRADE) { GradeScreen() }
             composable(Routes.JOURNAL) { JournalScreen() }
@@ -141,7 +144,7 @@ fun AppNavGraph(
             }
             composable(Routes.ONBOARDING) {
                 OnboardingScreen(onComplete = {
-                    navController.navigate(Routes.CHAT) {
+                    navController.navigate(Routes.TASKS) {
                         popUpTo(Routes.ONBOARDING) { inclusive = true }
                     }
                 })
