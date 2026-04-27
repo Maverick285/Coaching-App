@@ -41,48 +41,15 @@ class SettingsRepository(private val context: Context) {
         val DEFAULTS_VERSION = intPreferencesKey("defaults_version")
     }
 
-    /**
-     * If the build was compiled with non-empty BuildConfig defaults and
-     * we haven't yet migrated to them, overwrite any saved URL/token so
-     * fresh APKs always boot pointed at the correct backend. Lets us
-     * change the canonical URL or rotate the token by bumping
-     * BUDDY_DEFAULTS_VERSION in build.gradle.
-     */
-    suspend fun applyBuildDefaultsIfNeeded() {
-        val targetVersion = BuildConfig.DEFAULTS_VERSION
-        if (targetVersion <= 0) return
-        if (BuildConfig.DEFAULT_BACKEND_URL.isBlank() &&
-            BuildConfig.DEFAULT_AUTH_TOKEN.isBlank()
-        ) return
-        context.dataStore.edit { prefs ->
-            val current = prefs[Keys.DEFAULTS_VERSION] ?: 0
-            if (current >= targetVersion) return@edit
-            if (BuildConfig.DEFAULT_BACKEND_URL.isNotBlank()) {
-                prefs[Keys.BACKEND_URL] = BuildConfig.DEFAULT_BACKEND_URL
-            }
-            if (BuildConfig.DEFAULT_AUTH_TOKEN.isNotBlank()) {
-                prefs[Keys.AUTH_TOKEN] = BuildConfig.DEFAULT_AUTH_TOKEN
-            }
-            prefs[Keys.DEFAULTS_VERSION] = targetVersion
-        }
-    }
-
-    suspend fun resetBackendToDefaults() {
-        context.dataStore.edit { prefs ->
-            prefs.remove(Keys.BACKEND_URL)
-            prefs.remove(Keys.AUTH_TOKEN)
-            prefs.remove(Keys.DEFAULTS_VERSION)
-        }
-    }
-
     val flow: Flow<BuddySettings> = context.dataStore.data.map { prefs ->
-        // Backend URL + token fall back to build-time defaults baked in
-        // via local.properties, so reinstalls don't lose connectivity.
+        // Backend URL + auth token are baked in via BuildConfig and not
+        // stored in DataStore at all. This keeps them invariant across
+        // installs, hard resets, or stale prefs from earlier APK
+        // versions. To rotate, change buddy.backend.url / buddy.auth.token
+        // in android/local.properties and rebuild.
         BuddySettings(
-            backendUrl = prefs[Keys.BACKEND_URL]?.takeIf { it.isNotBlank() }
-                ?: BuildConfig.DEFAULT_BACKEND_URL,
-            authToken = prefs[Keys.AUTH_TOKEN]?.takeIf { it.isNotBlank() }
-                ?: BuildConfig.DEFAULT_AUTH_TOKEN,
+            backendUrl = BuildConfig.DEFAULT_BACKEND_URL,
+            authToken = BuildConfig.DEFAULT_AUTH_TOKEN,
             sessionId = prefs[Keys.SESSION_ID].orEmpty(),
             morningHour = prefs[Keys.MORNING_HOUR] ?: 7,
             morningMinute = prefs[Keys.MORNING_MINUTE] ?: 0,
@@ -94,11 +61,13 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setBackend(url: String, token: String) {
-        context.dataStore.edit { prefs ->
-            prefs[Keys.BACKEND_URL] = url.trim().trimEnd('/')
-            prefs[Keys.AUTH_TOKEN] = token.trim()
-        }
+        // No-op. Backend is hardcoded via BuildConfig — bake new values
+        // into local.properties + rebuild to change them.
     }
+
+    /** Kept for compatibility; the backend is no longer DataStore-backed. */
+    suspend fun applyBuildDefaultsIfNeeded() {}
+    suspend fun resetBackendToDefaults() {}
 
     suspend fun setSessionId(sessionId: String) {
         context.dataStore.edit { prefs ->
