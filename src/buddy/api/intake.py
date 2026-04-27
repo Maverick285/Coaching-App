@@ -113,18 +113,40 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
 
     user_payload = build_synthesis_user_message(transcript, settings.user_name)
     model = resolve_model(ModelTier.REASONING)
-    try:
-        result = await chat(
-            model=model,
-            system=SYNTHESIS_PROMPT,
-            messages=[{"role": "user", "content": user_payload}],
-            max_tokens=4096,
-            temperature=0.5,
-        )
-    except Exception as exc:
-        raise HTTPException(502, f"Synthesis call failed: {exc}") from exc
 
-    payload = _parse_synthesis_json(result.text)
+    # Try the synthesis call up to 3 times. Anthropic transient errors
+    # (overloaded, network blips) and one-off JSON-parse failures
+    # ("the model wandered out of strict JSON") are both common and both
+    # recoverable with a retry. Without this, a flaky network leaves the
+    # user stranded mid-onboarding.
+    payload: dict | None = None
+    last_error: str = ""
+    result = None
+    for attempt in range(3):
+        try:
+            result = await chat(
+                model=model,
+                system=SYNTHESIS_PROMPT,
+                messages=[{"role": "user", "content": user_payload}],
+                max_tokens=4096,
+                temperature=0.5 if attempt == 0 else 0.2,
+            )
+        except Exception as exc:
+            last_error = f"Anthropic call failed: {exc}"
+            continue
+        try:
+            payload = _parse_synthesis_json(result.text)
+            break
+        except HTTPException as http_exc:
+            last_error = f"Output not JSON (attempt {attempt + 1}): {http_exc.detail}"
+            continue
+
+    if payload is None:
+        raise HTTPException(
+            502,
+            f"Synthesis failed after 3 attempts. Last error: {last_error}",
+        )
+
     persona_md = payload["persona_md"].strip() + "\n"
     memory_md = payload["memory_md"].strip() + "\n"
     chosen_name = str(payload.get("name") or "").strip()
