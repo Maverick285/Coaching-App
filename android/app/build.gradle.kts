@@ -17,6 +17,9 @@ val localProps = Properties().apply {
 }
 val defaultBackendUrl: String = localProps.getProperty("buddy.backend.url", "")
 val defaultAuthToken: String = localProps.getProperty("buddy.auth.token", "")
+// Bump when you rotate the embedded URL or token — installed APKs will
+// then overwrite their stored values with the new defaults on next launch.
+val defaultsVersion: Int = (localProps.getProperty("buddy.defaults.version") ?: "1").toInt()
 
 android {
     namespace = "com.buddy.app"
@@ -34,6 +37,7 @@ android {
 
         buildConfigField("String", "DEFAULT_BACKEND_URL", "\"${defaultBackendUrl}\"")
         buildConfigField("String", "DEFAULT_AUTH_TOKEN", "\"${defaultAuthToken}\"")
+        buildConfigField("int", "DEFAULTS_VERSION", "${defaultsVersion}")
     }
 
     buildTypes {

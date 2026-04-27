@@ -211,6 +211,9 @@ class CustomizeViewModel(
                 a.adminReset(AdminResetRequest(confirm = "RESET"))
                 settingsRepo.setOnboardingComplete(false)
                 settingsRepo.clearSessionId()
+                // Drop any custom backend URL/token overrides so the
+                // baked-in BuildConfig defaults take over on next launch.
+                settingsRepo.resetBackendToDefaults()
                 _state.update {
                     it.copy(
                         resetting = false,

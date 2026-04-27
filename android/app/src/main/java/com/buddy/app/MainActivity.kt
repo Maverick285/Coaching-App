@@ -38,7 +38,12 @@ private fun BuddyApp(deeplink: String?) {
         var startRoute by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(Unit) {
-            val settings = SettingsRepository(context).flow.first()
+            val repo = SettingsRepository(context)
+            // Promote BuildConfig backend defaults into DataStore on first
+            // launch of a build with bumped DEFAULTS_VERSION. Stops stale
+            // tokens from earlier installs from outliving an APK rotation.
+            repo.applyBuildDefaultsIfNeeded()
+            val settings = repo.flow.first()
             // First-launch onboarding gate. A user who finished onboarding can
             // re-enter via Settings → Re-run onboarding.
             startRoute = when {

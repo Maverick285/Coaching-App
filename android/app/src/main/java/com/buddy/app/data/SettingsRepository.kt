@@ -36,6 +36,43 @@ class SettingsRepository(private val context: Context) {
         val EOD_MINUTE = intPreferencesKey("eod_minute")
         val ALARMS_ENABLED = booleanPreferencesKey("alarms_enabled")
         val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
+        // One-shot migration. Bumping in build.gradle promotes the
+        // BuildConfig defaults over any stale DataStore values.
+        val DEFAULTS_VERSION = intPreferencesKey("defaults_version")
+    }
+
+    /**
+     * If the build was compiled with non-empty BuildConfig defaults and
+     * we haven't yet migrated to them, overwrite any saved URL/token so
+     * fresh APKs always boot pointed at the correct backend. Lets us
+     * change the canonical URL or rotate the token by bumping
+     * BUDDY_DEFAULTS_VERSION in build.gradle.
+     */
+    suspend fun applyBuildDefaultsIfNeeded() {
+        val targetVersion = BuildConfig.DEFAULTS_VERSION
+        if (targetVersion <= 0) return
+        if (BuildConfig.DEFAULT_BACKEND_URL.isBlank() &&
+            BuildConfig.DEFAULT_AUTH_TOKEN.isBlank()
+        ) return
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.DEFAULTS_VERSION] ?: 0
+            if (current >= targetVersion) return@edit
+            if (BuildConfig.DEFAULT_BACKEND_URL.isNotBlank()) {
+                prefs[Keys.BACKEND_URL] = BuildConfig.DEFAULT_BACKEND_URL
+            }
+            if (BuildConfig.DEFAULT_AUTH_TOKEN.isNotBlank()) {
+                prefs[Keys.AUTH_TOKEN] = BuildConfig.DEFAULT_AUTH_TOKEN
+            }
+            prefs[Keys.DEFAULTS_VERSION] = targetVersion
+        }
+    }
+
+    suspend fun resetBackendToDefaults() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(Keys.BACKEND_URL)
+            prefs.remove(Keys.AUTH_TOKEN)
+            prefs.remove(Keys.DEFAULTS_VERSION)
+        }
     }
 
     val flow: Flow<BuddySettings> = context.dataStore.data.map { prefs ->
