@@ -117,6 +117,75 @@ data class TaskBatchNLResponse(
     @SerialName("raw_text") val rawText: String = "",
 )
 
+// --- Goal planner (wish -> structured plan) ---------------------------------
+
+@Serializable
+data class GoalPlanRequest(
+    val wish: String,
+    val deadline: String? = null,
+)
+
+@Serializable
+data class PlannedMilestone(
+    val statement: String,
+    val deadline: String? = null,
+    @SerialName("pace_target_unit") val paceTargetUnit: String = "",
+    @SerialName("pace_target_amount") val paceTargetAmount: Double = 0.0,
+    @SerialName("mvp_threshold") val mvpThreshold: String = "",
+)
+
+@Serializable
+data class PlannedTask(
+    val description: String,
+    @SerialName("estimated_duration_minutes") val estimatedDurationMinutes: Int? = null,
+    @SerialName("first_60_seconds") val first60Seconds: String = "",
+    @SerialName("scheduled_at") val scheduledAt: String? = null,
+)
+
+@Serializable
+data class PlannedIntention(
+    @SerialName("cue_type") val cueType: String,
+    @SerialName("cue_text") val cueText: String,
+    @SerialName("response_text") val responseText: String,
+)
+
+@Serializable
+data class GoalPlan(
+    val statement: String,
+    val rationale: String = "",
+    @SerialName("user_facing_summary") val userFacingSummary: String = "",
+    @SerialName("pace_target_unit") val paceTargetUnit: String,
+    @SerialName("pace_target_amount") val paceTargetAmount: Double,
+    @SerialName("pace_target_description") val paceTargetDescription: String = "",
+    @SerialName("mvp_threshold") val mvpThreshold: String = "",
+    @SerialName("intervention_ceiling") val interventionCeiling: Int = 2,
+    val approach: String = "hybrid",
+    val priority: Int = 3,
+    val deadline: String? = null,
+    val milestones: List<PlannedMilestone> = emptyList(),
+    @SerialName("first_week_tasks") val firstWeekTasks: List<PlannedTask> = emptyList(),
+    @SerialName("implementation_intentions") val implementationIntentions: List<PlannedIntention> = emptyList(),
+    val obstacles: List<String> = emptyList(),
+    @SerialName("outcome_vision") val outcomeVision: String = "",
+)
+
+@Serializable
+data class GoalPlanResponse(
+    val plan: GoalPlan,
+    @SerialName("raw_response") val rawResponse: String = "",
+)
+
+@Serializable
+data class GoalPlanApplyRequest(val plan: GoalPlan)
+
+@Serializable
+data class GoalPlanApplyResponse(
+    @SerialName("goal_id") val goalId: Int,
+    @SerialName("milestone_ids") val milestoneIds: List<Int> = emptyList(),
+    @SerialName("task_ids") val taskIds: List<Int> = emptyList(),
+    @SerialName("intention_ids") val intentionIds: List<Int> = emptyList(),
+)
+
 @Serializable
 data class Intention(
     val id: Int,

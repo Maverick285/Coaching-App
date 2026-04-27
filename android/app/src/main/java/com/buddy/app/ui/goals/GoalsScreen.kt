@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -142,14 +143,16 @@ fun GoalsScreen(
     }
 
     if (showAdd) {
-        NewGoalSheet(
+        NewGoalWizard(
             onDismiss = { showAdd = false },
-            onCreate = { req ->
-                viewModel.createGoal(req)
-                showAdd = false
+            onPlan = { wish, deadline, cb, errCb ->
+                viewModel.planGoal(wish, deadline, cb, errCb)
             },
-            onWoop = { wish, obstacle, unit, cb ->
-                viewModel.runWoop(WoopRequest(wish, obstacle, unit), cb)
+            onAccept = { plan ->
+                viewModel.applyPlan(plan) { goalId ->
+                    showAdd = false
+                    onGoalClicked(goalId)
+                }
             },
         )
     }
@@ -204,307 +207,6 @@ private fun GoalCard(goal: Goal, onClick: () -> Unit) {
     }
 }
 
-/**
- * Modal sheet for creating a goal. Grouped into Wish / Cadence / Floor /
- * Stakes / Help — the sections map to Locke & Latham's findings: specific
- * difficult goals out-perform vague easy ones; commitment + feedback
- * (the pace + MVP fields) raise odds; implementation intentions (WOOP)
- * close the intention–action gap.
- */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-private fun NewGoalSheet(
-    onDismiss: () -> Unit,
-    onCreate: (GoalCreate) -> Unit,
-    onWoop: (wish: String, obstacle: String?, unit: String?, cb: (WoopResponse) -> Unit) -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var statement by remember { mutableStateOf("") }
-    var paceUnit by remember { mutableStateOf("") }
-    var paceAmount by remember { mutableStateOf("") }
-    var paceDescription by remember { mutableStateOf("") }
-    var mvp by remember { mutableStateOf("") }
-    var priority by remember { mutableStateOf(3) }
-    var timeframe by remember { mutableStateOf("open_ended") }
-    var deadline by remember { mutableStateOf<LocalDate?>(null) }
-    var approach by remember { mutableStateOf("user_driven") }
-    var ceiling by remember { mutableStateOf(2) }
-    var initialObstacle by remember { mutableStateOf("") }
-    var showDeadlinePicker by remember { mutableStateOf(false) }
-    var woopRunning by remember { mutableStateOf(false) }
-    var woopResult by remember { mutableStateOf<WoopResponse?>(null) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp)
-                .imePadding()
-                .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text(
-                "New goal",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-
-            // --- Wish ----------------------------------------------------
-            SectionLabel("What do you want?", "Specific beats vague. Slightly hard beats easy.")
-            OutlinedTextField(
-                value = statement,
-                onValueChange = { statement = it },
-                placeholder = { Text("e.g. ship Buddy v1 to TestFlight") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            // --- Cadence -------------------------------------------------
-            SectionLabel(
-                "Cadence",
-                "How much per check-in cycle? Small + repeatable beats heroic + sporadic.",
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = paceAmount,
-                    onValueChange = { paceAmount = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                    label = { Text("Amount") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                OutlinedTextField(
-                    value = paceUnit,
-                    onValueChange = { paceUnit = it },
-                    label = { Text("Unit") },
-                    placeholder = { Text("pages, minutes, reps") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            OutlinedTextField(
-                value = paceDescription,
-                onValueChange = { paceDescription = it },
-                label = { Text("Or describe it") },
-                placeholder = { Text("if a number doesn't fit") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            // --- No-zero floor ------------------------------------------
-            SectionLabel(
-                "No-zero floor",
-                "The smallest thing that still counts as a 1 — keeps streaks alive on bad days.",
-            )
-            OutlinedTextField(
-                value = mvp,
-                onValueChange = { mvp = it },
-                placeholder = { Text("e.g. open the file and read one paragraph") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            // --- Stakes --------------------------------------------------
-            SectionLabel("Stakes", "Priority weights this goal in your daily grade.")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
-                    1 to "low",
-                    2 to "low-mid",
-                    3 to "medium",
-                    4 to "high",
-                    5 to "top",
-                ).forEach { (n, label) ->
-                    FilterChip(
-                        selected = priority == n,
-                        onClick = { priority = n },
-                        label = { Text("$n · $label") },
-                    )
-                }
-            }
-
-            SectionLabel("Timeframe", null)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
-                    "open_ended" to "Open-ended",
-                    "deadline" to "Deadline",
-                    "recurring" to "Recurring",
-                ).forEach { (id, label) ->
-                    FilterChip(
-                        selected = timeframe == id,
-                        onClick = { timeframe = id },
-                        label = { Text(label) },
-                    )
-                }
-            }
-            if (timeframe == "deadline") {
-                OutlinedButton(
-                    onClick = { showDeadlinePicker = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(deadline?.let { "Deadline: $it" } ?: "Pick deadline")
-                }
-            }
-
-            SectionLabel(
-                "Coaching tone",
-                "How much should the persona drive vs. follow on this one?",
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
-                    "user_driven" to "I drive",
-                    "hybrid" to "Hybrid",
-                    "system_assisted" to "Push me",
-                ).forEach { (id, label) ->
-                    FilterChip(
-                        selected = approach == id,
-                        onClick = { approach = id },
-                        label = { Text(label) },
-                    )
-                }
-            }
-
-            SectionLabel(
-                "Intervention ceiling",
-                "How aggressive can interventions get for this goal? Tier 0 = ambient, 4 = hard-block.",
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                (0..4).forEach { n ->
-                    FilterChip(
-                        selected = ceiling == n,
-                        onClick = { ceiling = n },
-                        label = { Text("T$n") },
-                    )
-                }
-            }
-
-            HorizontalDivider()
-
-            // --- Help me plan (WOOP) ------------------------------------
-            SectionLabel(
-                "Help me plan",
-                "Optional. Run WOOP — I'll suggest pace, obstacles, and if-then plans you can accept.",
-            )
-            OutlinedTextField(
-                value = initialObstacle,
-                onValueChange = { initialObstacle = it },
-                label = { Text("Biggest obstacle (optional)") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedButton(
-                onClick = {
-                    if (statement.isBlank()) return@OutlinedButton
-                    woopRunning = true
-                    onWoop(
-                        statement.trim(),
-                        initialObstacle.trim().takeIf { it.isNotEmpty() },
-                        paceUnit.trim().takeIf { it.isNotEmpty() },
-                    ) { resp ->
-                        woopRunning = false
-                        woopResult = resp
-                        if (paceUnit.isBlank()) paceUnit = resp.suggestedPaceUnit
-                        if (paceAmount.isBlank() && resp.suggestedPaceAmount > 0.0) {
-                            paceAmount = formatNumber(resp.suggestedPaceAmount)
-                        }
-                        if (paceDescription.isBlank() && resp.suggestedPaceDescription.isNotBlank()) {
-                            paceDescription = resp.suggestedPaceDescription
-                        }
-                    }
-                },
-                enabled = !woopRunning && statement.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (woopRunning) {
-                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.height(16.dp))
-                    Spacer(Modifier.height(0.dp))
-                    Text("  Thinking…")
-                } else {
-                    Text("Help me plan this with WOOP")
-                }
-            }
-
-            woopResult?.let { r ->
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (r.outcome.isNotBlank()) Text("Outcome: ${r.outcome}", style = MaterialTheme.typography.bodyMedium)
-                        if (r.obstacles.isNotEmpty()) Text("Obstacles: ${r.obstacles.joinToString(" · ")}", style = MaterialTheme.typography.bodyMedium)
-                        if (r.plan.isNotEmpty()) Text("Plan: ${r.plan.joinToString(" · ")}", style = MaterialTheme.typography.bodyMedium)
-                        if (r.suggestedIntentions.isNotEmpty()) {
-                            Text("If-then plans:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                            r.suggestedIntentions.forEach {
-                                Text(" • if ${it.cueText} → then ${it.responseText}", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider()
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                    Text("Cancel")
-                }
-                Button(
-                    onClick = {
-                        if (statement.isBlank()) return@Button
-                        val effectiveTimeframe = if (timeframe == "deadline" && deadline == null) {
-                            "open_ended"
-                        } else timeframe
-                        onCreate(
-                            GoalCreate(
-                                statement = statement.trim(),
-                                priority = priority,
-                                paceTargetAmount = paceAmount.toDoubleOrNull() ?: 0.0,
-                                paceTargetUnit = paceUnit.trim(),
-                                paceTargetDescription = paceDescription.trim(),
-                                mvpThreshold = mvp.trim(),
-                                approach = approach,
-                                planSource = if (woopResult != null) "system_plan" else "user_plan",
-                                timeframe = effectiveTimeframe,
-                                deadline = deadline?.toString(),
-                                interventionCeiling = ceiling,
-                            )
-                        )
-                    },
-                    enabled = statement.isNotBlank(),
-                    modifier = Modifier.weight(1f),
-                ) { Text("Create") }
-            }
-        }
-    }
-
-    if (showDeadlinePicker) {
-        val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = deadline?.atStartOfDay(ZoneId.systemDefault())
-                ?.toInstant()?.toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDeadlinePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    pickerState.selectedDateMillis?.let { ms ->
-                        deadline = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate()
-                    }
-                    showDeadlinePicker = false
-                }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeadlinePicker = false }) { Text("Cancel") }
-            },
-        ) {
-            DatePicker(state = pickerState)
-        }
-    }
-}
-
 @Composable
 private fun SectionLabel(title: String, hint: String?) {
     Column {
@@ -525,4 +227,332 @@ private fun SectionLabel(title: String, hint: String?) {
 
 private fun formatNumber(d: Double): String {
     return if (d == d.toLong().toDouble()) d.toLong().toString() else "%.2f".format(d)
+}
+
+/**
+ * Two-step goal wizard. The user types one sentence + an optional date.
+ * The backend planner turns that into a full plan (pace target, no-zero
+ * floor, milestones, first-week tasks, if-then plans, intervention
+ * ceiling). The user reviews in plain English and accepts in one tap.
+ * No technical fields ever appear unless the user expands "Advanced".
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NewGoalWizard(
+    onDismiss: () -> Unit,
+    onPlan: (
+        wish: String,
+        deadline: String?,
+        cb: (com.buddy.app.data.GoalPlan) -> Unit,
+        errCb: (String) -> Unit,
+    ) -> Unit,
+    onAccept: (com.buddy.app.data.GoalPlan) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var wish by remember { mutableStateOf("") }
+    var deadline by remember { mutableStateOf<java.time.LocalDate?>(null) }
+    var showDeadlinePicker by remember { mutableStateOf(false) }
+    var planning by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var plan by remember { mutableStateOf<com.buddy.app.data.GoalPlan?>(null) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .imePadding()
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            if (plan == null) {
+                WishStep(
+                    wish = wish,
+                    onWishChange = { wish = it },
+                    deadline = deadline,
+                    onPickDeadline = { showDeadlinePicker = true },
+                    onClearDeadline = { deadline = null },
+                    planning = planning,
+                    error = error,
+                    onCancel = onDismiss,
+                    onPlan = {
+                        if (wish.isBlank()) return@WishStep
+                        planning = true
+                        error = null
+                        onPlan(
+                            wish.trim(),
+                            deadline?.toString(),
+                            { result ->
+                                planning = false
+                                plan = result
+                            },
+                            { msg ->
+                                planning = false
+                                error = msg
+                            },
+                        )
+                    },
+                )
+            } else {
+                PlanReview(
+                    plan = plan!!,
+                    onBack = { plan = null },
+                    onAccept = { onAccept(plan!!) },
+                )
+            }
+        }
+    }
+
+    if (showDeadlinePicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = deadline?.atStartOfDay(java.time.ZoneId.systemDefault())
+                ?.toInstant()?.toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDeadlinePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { ms ->
+                        deadline = java.time.Instant.ofEpochMilli(ms)
+                            .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    }
+                    showDeadlinePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeadlinePicker = false }) { Text("Cancel") }
+            },
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+}
+
+@Composable
+private fun WishStep(
+    wish: String,
+    onWishChange: (String) -> Unit,
+    deadline: java.time.LocalDate?,
+    onPickDeadline: () -> Unit,
+    onClearDeadline: () -> Unit,
+    planning: Boolean,
+    error: String?,
+    onCancel: () -> Unit,
+    onPlan: () -> Unit,
+) {
+    Text(
+        "New goal",
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Text(
+        "Say what you want. I'll handle the rest.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    OutlinedTextField(
+        value = wish,
+        onValueChange = onWishChange,
+        label = { Text("Goal") },
+        placeholder = { Text("e.g. read 12 books this year") },
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !planning,
+    )
+
+    androidx.compose.material3.OutlinedButton(
+        onClick = onPickDeadline,
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !planning,
+    ) {
+        Text(deadline?.let { "By: $it" } ?: "Pick a target date (optional)")
+    }
+    if (deadline != null) {
+        TextButton(onClick = onClearDeadline) {
+            Text("Clear date")
+        }
+    }
+
+    if (error != null) {
+        Text(
+            error,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.OutlinedButton(
+            onClick = onCancel,
+            modifier = Modifier.weight(1f),
+            enabled = !planning,
+        ) { Text("Cancel") }
+        androidx.compose.material3.Button(
+            onClick = onPlan,
+            enabled = !planning && wish.isNotBlank(),
+            modifier = Modifier.weight(1f),
+        ) {
+            if (planning) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(16.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            } else {
+                Text("Plan it")
+            }
+        }
+    }
+    if (planning) {
+        Text(
+            "Thinking through pace, milestones, and a first-week plan…",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun PlanReview(
+    plan: com.buddy.app.data.GoalPlan,
+    onBack: () -> Unit,
+    onAccept: () -> Unit,
+) {
+    var showAdvanced by remember { mutableStateOf(false) }
+
+    Text(
+        plan.statement,
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    if (plan.userFacingSummary.isNotBlank()) {
+        Text(
+            plan.userFacingSummary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+
+    PlanSection(title = "Pace") {
+        val paceLine = if (plan.paceTargetDescription.isNotBlank()) {
+            plan.paceTargetDescription
+        } else {
+            "${formatNumber(plan.paceTargetAmount)} ${plan.paceTargetUnit}"
+        }
+        Text(paceLine, style = MaterialTheme.typography.bodyLarge)
+        if (plan.mvpThreshold.isNotBlank()) {
+            Text(
+                "Smallest win: ${plan.mvpThreshold}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (plan.firstWeekTasks.isNotEmpty()) {
+        PlanSection(title = "First steps") {
+            plan.firstWeekTasks.forEachIndexed { i, t ->
+                Text(
+                    "${i + 1}. ${t.description}" +
+                        (t.estimatedDurationMinutes?.let { " · ${it}m" } ?: ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (t.first60Seconds.isNotBlank()) {
+                    Text(
+                        "    start with: ${t.first60Seconds}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+
+    if (plan.milestones.isNotEmpty()) {
+        PlanSection(title = "Milestones") {
+            plan.milestones.forEach { m ->
+                val deadlineLabel = m.deadline?.let { " (by $it)" } ?: ""
+                Text("• ${m.statement}$deadlineLabel", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+
+    if (plan.implementationIntentions.isNotEmpty()) {
+        PlanSection(title = "If-then plans") {
+            plan.implementationIntentions.forEach { i ->
+                Text(
+                    "if ${i.cueText} → then ${i.responseText}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+
+    if (plan.obstacles.isNotEmpty()) {
+        PlanSection(title = "Obstacles to watch") {
+            plan.obstacles.forEach { o ->
+                Text("• $o", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+
+    HorizontalDivider()
+
+    TextButton(onClick = { showAdvanced = !showAdvanced }) {
+        Text(if (showAdvanced) "Hide technical settings" else "Show technical settings")
+    }
+    if (showAdvanced) {
+        Card(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Approach: ${plan.approach}", style = MaterialTheme.typography.labelMedium)
+                Text("Priority: ${plan.priority}", style = MaterialTheme.typography.labelMedium)
+                Text("Intervention ceiling: T${plan.interventionCeiling}", style = MaterialTheme.typography.labelMedium)
+                if (plan.deadline != null) {
+                    Text("Deadline: ${plan.deadline}", style = MaterialTheme.typography.labelMedium)
+                }
+                if (plan.outcomeVision.isNotBlank()) {
+                    Text("Outcome: ${plan.outcomeVision}", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.OutlinedButton(
+            onClick = onBack,
+            modifier = Modifier.weight(1f),
+        ) { Text("Edit goal") }
+        androidx.compose.material3.Button(
+            onClick = onAccept,
+            modifier = Modifier.weight(1f),
+        ) { Text("Save plan") }
+    }
+}
+
+@Composable
+private fun PlanSection(title: String, content: @Composable () -> Unit) {
+    Card(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            content()
+        }
+    }
 }

@@ -17,7 +17,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,7 +43,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -62,6 +66,20 @@ fun CustomizeScreen(
     val state by viewModel.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    var showResetConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.resetDone) {
+        if (state.resetDone) {
+            viewModel.onResetHandled()
+            // Restart the activity to land back on onboarding cleanly.
+            val intent = (context.packageManager.getLaunchIntentForPackage(context.packageName))
+                ?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (intent != null) {
+                context.startActivity(intent)
+                if (context is android.app.Activity) context.finish()
+            }
+        }
+    }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -217,6 +235,25 @@ fun CustomizeScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Re-run onboarding next launch") }
 
+            Button(
+                onClick = { showResetConfirm = true },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !state.resetting,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
+            ) {
+                if (state.resetting) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.size(6.dp))
+                }
+                Text("Reset all data")
+            }
+
             OutlinedButton(
                 onClick = {
                     val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
@@ -251,6 +288,27 @@ fun CustomizeScreen(
                 )
             }
         }
+    }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("Reset all data?") },
+            text = {
+                Text(
+                    "This wipes every goal, task, conversation, journal entry, persona file, and grade — on the server and on this phone. Your backend connection and Anthropic key stay. There's no undo.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetConfirm = false
+                    viewModel.factoryReset()
+                }) { Text("Yes, wipe everything") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
+            },
+        )
     }
 }
 

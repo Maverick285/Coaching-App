@@ -236,6 +236,17 @@ data class DistractionRule(
 @Serializable
 data class DistractionRulesListResponse(val rules: List<DistractionRule>)
 
+// --- Admin: factory reset ------------------------------------------------
+
+@Serializable
+data class AdminResetRequest(val confirm: String)
+
+@Serializable
+data class AdminResetResponse(
+    @SerialName("cleared_tables") val clearedTables: List<String> = emptyList(),
+    @SerialName("cleared_files") val clearedFiles: List<String> = emptyList(),
+)
+
 @Serializable
 data class DistractionRuleCreate(
     @SerialName("goal_id") val goalId: Int,

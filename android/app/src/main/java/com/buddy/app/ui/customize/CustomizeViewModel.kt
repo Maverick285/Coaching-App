@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.buddy.app.data.AdminResetRequest
 import com.buddy.app.data.ApiHolder
 import com.buddy.app.data.BuddyApi
 import com.buddy.app.data.HealthResponse
@@ -39,6 +40,8 @@ data class CustomizeUiState(
     val health: HealthResponse? = null,
     val healthError: String? = null,
     val usage: UsageResponse? = null,
+    val resetting: Boolean = false,
+    val resetDone: Boolean = false,
     val message: String? = null,
     val error: String? = null,
 )
@@ -192,6 +195,36 @@ class CustomizeViewModel(
             _state.update { it.copy(message = "Onboarding will run on next launch.") }
         }
     }
+
+    /**
+     * Hard reset. Wipes all goals, tasks, conversations, journal entries,
+     * persona files, etc. on the server, then clears local session +
+     * onboarding flag. Backend URL + bearer token + Anthropic key stay
+     * untouched (they live in env, not the database).
+     */
+    fun factoryReset() {
+        val a = api ?: return
+        if (_state.value.resetting) return
+        viewModelScope.launch {
+            _state.update { it.copy(resetting = true, error = null) }
+            try {
+                a.adminReset(AdminResetRequest(confirm = "RESET"))
+                settingsRepo.setOnboardingComplete(false)
+                settingsRepo.clearSessionId()
+                _state.update {
+                    it.copy(
+                        resetting = false,
+                        resetDone = true,
+                        message = "Wiped. Restart the app to re-onboard.",
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(resetting = false, error = e.message) }
+            }
+        }
+    }
+
+    fun onResetHandled() = _state.update { it.copy(resetDone = false) }
 
     companion object {
         fun factory(app: Application): ViewModelProvider.Factory = viewModelFactory {

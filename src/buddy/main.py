@@ -11,11 +11,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from buddy import __version__
 from buddy.api import agent as agent_api
+from buddy.api import admin as admin_api
 from buddy.api import blocks as blocks_api
 from buddy.api import capture as capture_api
 from buddy.api import conversations as conversations_api
 from buddy.api import converse as converse_api
 from buddy.api import focus as focus_api
+from buddy.api import goal_planner as goal_planner_api
 from buddy.api import goals as goals_api
 from buddy.api import grade as grade_api
 from buddy.api import health as health_api
@@ -75,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(usage_api.router)
     # Phase 2 routes.
     app.include_router(goals_api.router)
+    app.include_router(goal_planner_api.router)
     app.include_router(tasks_nl_api.router)
     app.include_router(progress_api.router)
     app.include_router(grade_api.router)
@@ -90,6 +93,8 @@ def create_app() -> FastAPI:
     # Phase 5: blocked-app rules + override system.
     app.include_router(blocks_api.router)
     app.include_router(overrides_api.router)
+    # Admin: factory reset.
+    app.include_router(admin_api.router)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(_: Request, exc: StarletteHTTPException):

@@ -11,6 +11,9 @@ import com.buddy.app.data.BuddyApi
 import com.buddy.app.data.Goal
 import com.buddy.app.data.GoalCreate
 import com.buddy.app.data.GoalDetail
+import com.buddy.app.data.GoalPlan
+import com.buddy.app.data.GoalPlanApplyRequest
+import com.buddy.app.data.GoalPlanRequest
 import com.buddy.app.data.GoalUpdate
 import com.buddy.app.data.ProductivityRepository
 import com.buddy.app.data.ProgressLogCreate
@@ -97,6 +100,36 @@ class GoalsViewModel(holder: ApiHolder) : ViewModel() {
         viewModelScope.launch {
             try {
                 onDone(r.runWoop(req))
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    fun planGoal(
+        wish: String,
+        deadline: String?,
+        onDone: (GoalPlan) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                val resp = r.api.planGoal(GoalPlanRequest(wish = wish.trim(), deadline = deadline))
+                onDone(resp.plan)
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to plan goal")
+            }
+        }
+    }
+
+    fun applyPlan(plan: GoalPlan, onDone: (Int) -> Unit) {
+        val r = repo ?: return
+        viewModelScope.launch {
+            try {
+                val resp = r.api.applyGoalPlan(GoalPlanApplyRequest(plan = plan))
+                refresh()
+                onDone(resp.goalId)
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }
             }

@@ -43,6 +43,12 @@ interface BuddyApi {
     @POST("/goals/woop")
     suspend fun runWoop(@Body req: WoopRequest): WoopResponse
 
+    @POST("/goals/plan")
+    suspend fun planGoal(@Body req: GoalPlanRequest): GoalPlanResponse
+
+    @POST("/goals/plan/apply")
+    suspend fun applyGoalPlan(@Body req: GoalPlanApplyRequest): GoalPlanApplyResponse
+
     // --- Tasks -------------------------------------------------------------
 
     @GET("/tasks")
@@ -218,4 +224,9 @@ interface BuddyApi {
 
     @GET("/overrides/{id}")
     suspend fun getOverride(@Path("id") id: Int): OverrideRequest
+
+    // --- Admin -------------------------------------------------------------
+
+    @POST("/admin/reset")
+    suspend fun adminReset(@Body req: AdminResetRequest): AdminResetResponse
 }
