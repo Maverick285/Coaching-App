@@ -134,9 +134,28 @@ data class ProfileUpdate(
 // --- Persona intake (in-app flow) -----------------------------------------
 
 @Serializable
+data class IntakeOption(
+    val id: String,
+    val label: String,
+    val body: String? = null,  // populated on pair_choice
+)
+
+@Serializable
+data class IntakeQuestion(
+    val key: String,
+    val kind: String,                // text_short | text_long | pair_choice | scale | multi_choice
+    val prompt: String,
+    val axis: String = "",
+    val optional: Boolean = false,
+    val options: List<IntakeOption>? = null,
+    @SerialName("scale_low") val scaleLow: String? = null,
+    @SerialName("scale_high") val scaleHigh: String? = null,
+)
+
+@Serializable
 data class IntakeStartResponse(
     @SerialName("intake_id") val intakeId: String,
-    val question: String,
+    val question: IntakeQuestion? = null,
     val step: Int,
     @SerialName("total_steps") val totalSteps: Int,
 )
@@ -144,13 +163,19 @@ data class IntakeStartResponse(
 @Serializable
 data class IntakeTurnRequest(
     @SerialName("intake_id") val intakeId: String,
-    val answer: String,
+    /** Shape depends on the question kind:
+     *    text_short / text_long → {"text": "..."}
+     *    pair_choice            → {"id": "matter_of_fact"}
+     *    scale                  → {"value": 3}
+     *    multi_choice           → {"selected": ["sleep", "exercise"]}
+     */
+    val answer: kotlinx.serialization.json.JsonObject,
 )
 
 @Serializable
 data class IntakeTurnResponse(
     @SerialName("intake_id") val intakeId: String,
-    val question: String? = null,
+    val question: IntakeQuestion? = null,
     val step: Int,
     @SerialName("total_steps") val totalSteps: Int,
     val finished: Boolean,

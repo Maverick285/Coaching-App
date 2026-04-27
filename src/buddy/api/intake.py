@@ -25,12 +25,29 @@ from buddy.models import ApiUsage, IntakeSession
 from buddy.schemas import (
     IntakeFinalizeRequest,
     IntakeFinalizeResponse,
+    IntakeOption,
+    IntakeQuestion,
     IntakeStartResponse,
     IntakeTurnRequest,
     IntakeTurnResponse,
 )
 
 router = APIRouter()
+
+
+def _to_question_dto(q: dict) -> IntakeQuestion:
+    """Convert the raw question-spec dict into the typed wire shape."""
+    options = q.get("options")
+    return IntakeQuestion(
+        key=q["key"],
+        kind=q["kind"],
+        prompt=q["prompt"],
+        axis=q.get("axis", ""),
+        optional=bool(q.get("optional", False)),
+        options=[IntakeOption(**o) for o in options] if options else None,
+        scale_low=q.get("scale_low"),
+        scale_high=q.get("scale_high"),
+    )
 
 
 @router.post("/intake/start", response_model=IntakeStartResponse, dependencies=[Depends(require_auth)])
@@ -47,10 +64,9 @@ async def start_intake() -> IntakeStartResponse:
             )
         )
         await db.commit()
-    first = INTAKE_QUESTIONS[0]
     return IntakeStartResponse(
         intake_id=intake_id,
-        question=first["prompt"],
+        question=_to_question_dto(INTAKE_QUESTIONS[0]),
         step=1,
         total_steps=len(INTAKE_QUESTIONS),
     )
@@ -71,12 +87,21 @@ async def intake_turn(req: IntakeTurnRequest) -> IntakeTurnResponse:
             raise HTTPException(400, "All questions have been answered. Call /intake/finalize.")
 
         q = INTAKE_QUESTIONS[step]
+        # Normalise the typed answer into a uniform shape that both
+        # build_synthesis_user_message_v2 (LLM input) and the test suite
+        # can reason about.
+        normalized_answer = _normalize_answer(q, req.answer)
         transcript = list(sess.transcript or [])
         transcript.append(
             {
                 "key": q["key"],
+                "kind": q["kind"],
+                "axis": q.get("axis", ""),
                 "question": q["prompt"],
-                "answer": req.answer.strip(),
+                "options": q.get("options"),
+                "scale_low": q.get("scale_low"),
+                "scale_high": q.get("scale_high"),
+                "answer": normalized_answer,
             }
         )
         new_step = step + 1
@@ -85,7 +110,7 @@ async def intake_turn(req: IntakeTurnRequest) -> IntakeTurnResponse:
         await db.commit()
 
     finished = new_step >= len(INTAKE_QUESTIONS)
-    next_q = None if finished else INTAKE_QUESTIONS[new_step]["prompt"]
+    next_q = None if finished else _to_question_dto(INTAKE_QUESTIONS[new_step])
     return IntakeTurnResponse(
         intake_id=req.intake_id,
         question=next_q,
@@ -93,6 +118,34 @@ async def intake_turn(req: IntakeTurnRequest) -> IntakeTurnResponse:
         total_steps=len(INTAKE_QUESTIONS),
         finished=finished,
     )
+
+
+def _normalize_answer(question: dict, raw: dict) -> object:
+    """Convert the client's typed payload into the canonical internal form
+    that build_synthesis_user_message_v2 expects."""
+    kind = question["kind"]
+    if kind in ("text_short", "text_long"):
+        text = (raw.get("text") or "").strip() if isinstance(raw, dict) else str(raw or "").strip()
+        return text
+    if kind == "pair_choice":
+        chosen_id = raw.get("id") if isinstance(raw, dict) else None
+        for opt in question.get("options") or []:
+            if opt.get("id") == chosen_id:
+                return {"id": chosen_id, "label": opt.get("label", "")}
+        return {"id": chosen_id, "label": ""}
+    if kind == "scale":
+        try:
+            value = int(raw.get("value", 3)) if isinstance(raw, dict) else int(raw)
+        except (ValueError, TypeError):
+            value = 3
+        return max(1, min(5, value))
+    if kind == "multi_choice":
+        selected = raw.get("selected") if isinstance(raw, dict) else raw
+        if not isinstance(selected, list):
+            return []
+        valid_ids = {o["id"] for o in (question.get("options") or [])}
+        return [s for s in selected if s in valid_ids]
+    return raw
 
 
 @router.post(

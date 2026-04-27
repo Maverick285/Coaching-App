@@ -49,10 +49,14 @@ data class OnboardingUiState(
     val backendValidated: Boolean = false,
     // Intake step
     val intakeId: String? = null,
-    val intakeQuestion: String? = null,
+    val intakeQuestion: com.buddy.app.data.IntakeQuestion? = null,
     val intakeStep: Int = 0,
     val intakeTotal: Int = 0,
-    val intakeAnswer: String = "",
+    // Per-kind in-flight answers; only the relevant one is used per question.
+    val answerText: String = "",
+    val answerPairId: String? = null,
+    val answerScale: Int = 3,
+    val answerMultiSelected: Set<String> = emptySet(),
     val intakeSubmitting: Boolean = false,
     val intakeFinalizing: Boolean = false,
     val intakeFinished: Boolean = false,
@@ -215,7 +219,10 @@ class OnboardingViewModel(
                         intakeQuestion = resp.question,
                         intakeStep = resp.step,
                         intakeTotal = resp.totalSteps,
-                        intakeAnswer = "",
+                        answerText = "",
+                        answerPairId = null,
+                        answerScale = 3,
+                        answerMultiSelected = emptySet(),
                         intakeFinished = false,
                     )
                 }
@@ -225,25 +232,76 @@ class OnboardingViewModel(
         }
     }
 
-    fun setIntakeAnswer(value: String) {
-        _state.update { it.copy(intakeAnswer = value) }
+    fun setAnswerText(value: String) =
+        _state.update { it.copy(answerText = value) }
+
+    fun setAnswerPair(id: String) =
+        _state.update { it.copy(answerPairId = id) }
+
+    fun setAnswerScale(value: Int) =
+        _state.update { it.copy(answerScale = value.coerceIn(1, 5)) }
+
+    fun toggleAnswerMulti(id: String) =
+        _state.update {
+            val cur = it.answerMultiSelected
+            it.copy(answerMultiSelected = if (id in cur) cur - id else cur + id)
+        }
+
+    /** Build the JSON payload for the current question's answer. */
+    private fun buildAnswerPayload(s: OnboardingUiState): kotlinx.serialization.json.JsonObject {
+        val q = s.intakeQuestion ?: return kotlinx.serialization.json.JsonObject(emptyMap())
+        val obj = kotlinx.serialization.json.buildJsonObject {
+            when (q.kind) {
+                "text_short", "text_long" ->
+                    put("text", kotlinx.serialization.json.JsonPrimitive(s.answerText.trim()))
+                "pair_choice" ->
+                    put("id", kotlinx.serialization.json.JsonPrimitive(s.answerPairId ?: ""))
+                "scale" ->
+                    put("value", kotlinx.serialization.json.JsonPrimitive(s.answerScale))
+                "multi_choice" ->
+                    put(
+                        "selected",
+                        kotlinx.serialization.json.JsonArray(
+                            s.answerMultiSelected.map { kotlinx.serialization.json.JsonPrimitive(it) }
+                        ),
+                    )
+            }
+        }
+        return obj
+    }
+
+    /** True when the current question has a usable answer. */
+    fun isCurrentAnswerReady(): Boolean {
+        val q = _state.value.intakeQuestion ?: return false
+        if (q.optional) return true
+        return when (q.kind) {
+            "text_short", "text_long" -> _state.value.answerText.isNotBlank()
+            "pair_choice" -> _state.value.answerPairId != null
+            "scale" -> true   // always has a default value
+            "multi_choice" -> true   // empty selection is valid (means "none")
+            else -> true
+        }
     }
 
     fun submitIntakeAnswer() {
         val a = api ?: return
         val s = _state.value
         val intakeId = s.intakeId ?: return
-        if (s.intakeAnswer.isBlank()) return
         viewModelScope.launch {
             _state.update { it.copy(intakeSubmitting = true, error = null) }
             try {
-                val resp = a.intakeTurn(IntakeTurnRequest(intakeId, s.intakeAnswer.trim()))
+                val payload = buildAnswerPayload(s)
+                val resp = a.intakeTurn(IntakeTurnRequest(intakeId, payload))
                 _state.update {
                     it.copy(
                         intakeSubmitting = false,
                         intakeQuestion = resp.question,
                         intakeStep = resp.step,
-                        intakeAnswer = "",
+                        // Reset per-kind answer fields for the next question.
+                        answerText = "",
+                        answerPairId = null,
+                        answerScale = 3,
+                        answerMultiSelected = emptySet(),
                         intakeFinished = resp.finished,
                     )
                 }

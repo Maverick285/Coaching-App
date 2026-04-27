@@ -225,11 +225,12 @@ private fun IntakeStep(state: OnboardingUiState, vm: OnboardingViewModel) {
 
     StepHeading(
         title = "Persona",
-        subtitle = "Ten short questions calibrate the persona's voice. You can skip and stick with defaults; you can re-run later from Settings.",
+        subtitle = "About 12 quick prompts — mostly taps, a few short answers — calibrate the voice. Skip any time.",
     )
     Spacer(Modifier.height(20.dp))
 
-    if (state.intakeQuestion != null && !state.intakeFinished) {
+    val q = state.intakeQuestion
+    if (q != null && !state.intakeFinished) {
         Text(
             text = "Question ${state.intakeStep} of ${state.intakeTotal}",
             style = MaterialTheme.typography.labelMedium,
@@ -237,22 +238,20 @@ private fun IntakeStep(state: OnboardingUiState, vm: OnboardingViewModel) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = state.intakeQuestion!!,
+            text = q.prompt,
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(14.dp))
-        // Buttons FIRST — pinned visibly above the text field so they're
-        // never hidden by the soft keyboard. Reverse of the usual layout
-        // intentionally.
+        // Buttons pinned above the input — never hidden by the keyboard.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = vm::skipIntake, modifier = Modifier.weight(1f)) {
-                Text("Skip")
+                Text("Skip rest")
             }
             Button(
                 onClick = vm::submitIntakeAnswer,
                 modifier = Modifier.weight(1f),
-                enabled = !state.intakeSubmitting && state.intakeAnswer.isNotBlank(),
+                enabled = !state.intakeSubmitting && vm.isCurrentAnswerReady(),
             ) {
                 if (state.intakeSubmitting) {
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
@@ -261,25 +260,8 @@ private fun IntakeStep(state: OnboardingUiState, vm: OnboardingViewModel) {
                 Text("Next →")
             }
         }
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(
-            value = state.intakeAnswer,
-            onValueChange = vm::setIntakeAnswer,
-            placeholder = { Text("Type your answer…") },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 220.dp),
-            maxLines = 6,
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                imeAction = androidx.compose.ui.text.input.ImeAction.Send,
-                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
-            ),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                onSend = {
-                    if (state.intakeAnswer.isNotBlank() && !state.intakeSubmitting) {
-                        vm.submitIntakeAnswer()
-                    }
-                },
-            ),
-        )
+        Spacer(Modifier.height(14.dp))
+        IntakeAnswerControl(state = state, q = q, vm = vm)
     } else if (state.intakeFinished) {
         Text(
             text = "Done with the questions. Synthesizing PERSONA.md and MEMORY.md — this calls the reasoning tier and may take a few seconds.",
@@ -306,6 +288,128 @@ private fun IntakeStep(state: OnboardingUiState, vm: OnboardingViewModel) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IntakeAnswerControl(
+    state: OnboardingUiState,
+    q: com.buddy.app.data.IntakeQuestion,
+    vm: OnboardingViewModel,
+) {
+    when (q.kind) {
+        "text_short" -> OutlinedTextField(
+            value = state.answerText,
+            onValueChange = vm::setAnswerText,
+            placeholder = { Text("Type your answer…") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSend = {
+                    if (vm.isCurrentAnswerReady() && !state.intakeSubmitting) {
+                        vm.submitIntakeAnswer()
+                    }
+                },
+            ),
+        )
+        "text_long" -> OutlinedTextField(
+            value = state.answerText,
+            onValueChange = vm::setAnswerText,
+            placeholder = { Text("Type your answer…") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 200.dp),
+            maxLines = 6,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                imeAction = androidx.compose.ui.text.input.ImeAction.Default,
+                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+            ),
+        )
+        "pair_choice" -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            (q.options ?: emptyList()).forEach { opt ->
+                val selected = state.answerPairId == opt.id
+                androidx.compose.material3.Card(
+                    onClick = { vm.setAnswerPair(opt.id) },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.surface,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = opt.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "“${opt.body.orEmpty()}”",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+        }
+        "scale" -> Column {
+            androidx.compose.material3.Slider(
+                value = state.answerScale.toFloat(),
+                onValueChange = { vm.setAnswerScale(it.toInt()) },
+                valueRange = 1f..5f,
+                steps = 3,  // 1, 2, 3, 4, 5 → 5 stops = 3 steps between
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = q.scaleLow.orEmpty(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = q.scaleHigh.orEmpty(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Currently: ${state.answerScale} / 5",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        "multi_choice" -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            (q.options ?: emptyList()).forEach { opt ->
+                val selected = opt.id in state.answerMultiSelected
+                androidx.compose.material3.FilterChip(
+                    selected = selected,
+                    onClick = { vm.toggleAnswerMulti(opt.id) },
+                    label = { Text(opt.label) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "(Tap any number, including none.)",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        else -> Text(
+            text = "(Unsupported question kind: ${q.kind})",
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 }
 

@@ -234,21 +234,53 @@ class UsageResponse(BaseModel):
 # --- Intake ---------------------------------------------------------------
 
 
+class IntakeOption(BaseModel):
+    id: str
+    label: str
+    body: str | None = None  # only for pair_choice
+
+
+class IntakeQuestion(BaseModel):
+    """One typed question shipped to the client.
+
+    Kind drives which renderer the client uses:
+      text_short  — single-line input
+      text_long   — multi-line input
+      pair_choice — A vs B (options is exactly 2)
+      scale       — 5-point scale; scale_low / scale_high label the ends
+      multi_choice — pick zero or more from options
+    """
+
+    key: str
+    kind: str
+    prompt: str
+    axis: str = ""
+    optional: bool = False
+    options: list[IntakeOption] | None = None
+    scale_low: str | None = None
+    scale_high: str | None = None
+
+
 class IntakeStartResponse(BaseModel):
     intake_id: str
-    question: str
+    question: IntakeQuestion | None
     step: int
     total_steps: int
 
 
 class IntakeTurnRequest(BaseModel):
     intake_id: str
-    answer: str
+    # Typed answer payload. Shape depends on the question kind:
+    #   text_short / text_long → {"text": "..."}
+    #   pair_choice            → {"id": "matter_of_fact"}
+    #   scale                  → {"value": 3}
+    #   multi_choice           → {"selected": ["sleep", "exercise"]}
+    answer: dict[str, Any] = Field(default_factory=dict)
 
 
 class IntakeTurnResponse(BaseModel):
     intake_id: str
-    question: str | None
+    question: IntakeQuestion | None
     step: int
     total_steps: int
     finished: bool
