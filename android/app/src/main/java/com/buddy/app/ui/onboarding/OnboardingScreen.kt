@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -241,17 +242,12 @@ private fun IntakeStep(state: OnboardingUiState, vm: OnboardingViewModel) {
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(14.dp))
-        OutlinedTextField(
-            value = state.intakeAnswer,
-            onValueChange = vm::setIntakeAnswer,
-            placeholder = { Text("Type your answer…") },
-            modifier = Modifier.fillMaxWidth().height(160.dp),
-            maxLines = 8,
-        )
-        Spacer(Modifier.height(12.dp))
+        // Buttons FIRST — pinned visibly above the text field so they're
+        // never hidden by the soft keyboard. Reverse of the usual layout
+        // intentionally.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = vm::skipIntake, modifier = Modifier.weight(1f)) {
-                Text("Skip intake")
+                Text("Skip")
             }
             Button(
                 onClick = vm::submitIntakeAnswer,
@@ -262,9 +258,28 @@ private fun IntakeStep(state: OnboardingUiState, vm: OnboardingViewModel) {
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.size(6.dp))
                 }
-                Text("Next question")
+                Text("Next →")
             }
         }
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = state.intakeAnswer,
+            onValueChange = vm::setIntakeAnswer,
+            placeholder = { Text("Type your answer…") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 220.dp),
+            maxLines = 6,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSend = {
+                    if (state.intakeAnswer.isNotBlank() && !state.intakeSubmitting) {
+                        vm.submitIntakeAnswer()
+                    }
+                },
+            ),
+        )
     } else if (state.intakeFinished) {
         Text(
             text = "Done with the questions. Synthesizing PERSONA.md and MEMORY.md — this calls the reasoning tier and may take a few seconds.",
