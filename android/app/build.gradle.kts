@@ -5,6 +5,19 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+import java.util.Properties
+
+// Read backend defaults from local.properties (gitignored). Used to bake
+// the bearer token + backend URL into the APK so reinstalls don't lose
+// them. Falls back to empty strings if the keys aren't set; the user can
+// always override via Settings.
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val defaultBackendUrl: String = localProps.getProperty("buddy.backend.url", "")
+val defaultAuthToken: String = localProps.getProperty("buddy.auth.token", "")
+
 android {
     namespace = "com.buddy.app"
     compileSdk = 34
@@ -18,6 +31,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        buildConfigField("String", "DEFAULT_BACKEND_URL", "\"${defaultBackendUrl}\"")
+        buildConfigField("String", "DEFAULT_AUTH_TOKEN", "\"${defaultAuthToken}\"")
     }
 
     buildTypes {
@@ -45,6 +61,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

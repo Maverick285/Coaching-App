@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.buddy.app.BuildConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -38,9 +39,13 @@ class SettingsRepository(private val context: Context) {
     }
 
     val flow: Flow<BuddySettings> = context.dataStore.data.map { prefs ->
+        // Backend URL + token fall back to build-time defaults baked in
+        // via local.properties, so reinstalls don't lose connectivity.
         BuddySettings(
-            backendUrl = prefs[Keys.BACKEND_URL].orEmpty(),
-            authToken = prefs[Keys.AUTH_TOKEN].orEmpty(),
+            backendUrl = prefs[Keys.BACKEND_URL]?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.DEFAULT_BACKEND_URL,
+            authToken = prefs[Keys.AUTH_TOKEN]?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.DEFAULT_AUTH_TOKEN,
             sessionId = prefs[Keys.SESSION_ID].orEmpty(),
             morningHour = prefs[Keys.MORNING_HOUR] ?: 7,
             morningMinute = prefs[Keys.MORNING_MINUTE] ?: 0,
