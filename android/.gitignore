@@ -19,6 +19,7 @@ release/
 # Gradle
 .gradle/
 build/
+.kotlin/
 
 # Local config (contains absolute SDK path)
 local.properties
