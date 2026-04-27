@@ -97,7 +97,6 @@ fun OnboardingScreen(
                     ) {
                         when (state.step) {
                             OnboardingStep.WELCOME -> WelcomeStep(viewModel::next)
-                            OnboardingStep.BACKEND -> BackendStep(state, viewModel)
                             OnboardingStep.INTAKE -> IntakeStep(state, viewModel)
                             OnboardingStep.RHYTHM -> RhythmStep(state, viewModel)
                             OnboardingStep.FIRST_GOAL -> FirstGoalStep(state, viewModel)
@@ -153,65 +152,6 @@ private fun WelcomeStep(onNext: () -> Unit) {
     )
     Spacer(Modifier.height(28.dp))
     Button(onClick = onNext, modifier = Modifier.fillMaxWidth()) { Text("Begin") }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BackendStep(state: OnboardingUiState, vm: OnboardingViewModel) {
-    StepHeading(
-        title = "Backend",
-        subtitle = "Where the persona's memory lives. URL + bearer token from your .env. Test connection before moving on.",
-    )
-    Spacer(Modifier.height(20.dp))
-
-    OutlinedTextField(
-        value = state.backendUrl,
-        onValueChange = vm::setBackendUrl,
-        label = { Text("Backend URL") },
-        placeholder = { Text("https://buddy.example.com") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-        modifier = Modifier.fillMaxWidth(),
-    )
-    Spacer(Modifier.height(8.dp))
-    OutlinedTextField(
-        value = state.authToken,
-        onValueChange = vm::setAuthToken,
-        label = { Text("Auth token") },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth(),
-    )
-    Spacer(Modifier.height(12.dp))
-
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(
-            onClick = { vm.testBackend() },
-            enabled = !state.testing,
-            modifier = Modifier.weight(1f),
-        ) {
-            if (state.testing) {
-                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.size(6.dp))
-            }
-            Text("Test connection")
-        }
-        Button(
-            onClick = vm::next,
-            enabled = state.backendValidated,
-            modifier = Modifier.weight(1f),
-        ) { Text("Continue") }
-    }
-
-    state.testResult?.let { msg ->
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = msg,
-            color = if (state.testError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
  * Settings → Re-run intake.
  */
 enum class OnboardingStep {
-    WELCOME, BACKEND, INTAKE, RHYTHM, FIRST_GOAL, DONE
+    WELCOME, INTAKE, RHYTHM, FIRST_GOAL, DONE
 }
 
 data class OnboardingUiState(
@@ -113,8 +113,7 @@ class OnboardingViewModel(
     fun next() {
         val s = _state.value
         val nextStep = when (s.step) {
-            OnboardingStep.WELCOME -> OnboardingStep.BACKEND
-            OnboardingStep.BACKEND -> OnboardingStep.INTAKE
+            OnboardingStep.WELCOME -> OnboardingStep.INTAKE
             OnboardingStep.INTAKE -> OnboardingStep.RHYTHM
             OnboardingStep.RHYTHM -> OnboardingStep.FIRST_GOAL
             OnboardingStep.FIRST_GOAL -> OnboardingStep.DONE
@@ -127,8 +126,7 @@ class OnboardingViewModel(
         val s = _state.value
         val prev = when (s.step) {
             OnboardingStep.WELCOME -> OnboardingStep.WELCOME
-            OnboardingStep.BACKEND -> OnboardingStep.WELCOME
-            OnboardingStep.INTAKE -> OnboardingStep.BACKEND
+            OnboardingStep.INTAKE -> OnboardingStep.WELCOME
             OnboardingStep.RHYTHM -> OnboardingStep.INTAKE
             OnboardingStep.FIRST_GOAL -> OnboardingStep.RHYTHM
             OnboardingStep.DONE -> OnboardingStep.FIRST_GOAL

@@ -107,55 +107,9 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(
-                value = state.backendUrl,
-                onValueChange = viewModel::onBackendUrlChanged,
-                label = { Text(stringResource(R.string.label_backend_url)) },
-                placeholder = { Text(stringResource(R.string.hint_backend_url)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = state.authToken,
-                onValueChange = viewModel::onAuthTokenChanged,
-                label = { Text(stringResource(R.string.label_auth_token)) },
-                placeholder = { Text(stringResource(R.string.hint_auth_token)) },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = { viewModel.save() },
-                    modifier = Modifier.weight(1f),
-                ) { Text(stringResource(R.string.action_save)) }
-                OutlinedButton(
-                    onClick = {
-                        viewModel.testConnection(
-                            formatOk = { models ->
-                                context.getString(R.string.msg_connection_ok, models)
-                            },
-                            formatErr = { err ->
-                                context.getString(R.string.msg_connection_failed, err)
-                            },
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !state.testing,
-                ) {
-                    if (state.testing) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.size(8.dp))
-                    }
-                    Text(stringResource(R.string.action_test_connection))
-                }
-            }
+            // Backend URL + auth token are baked into the build. No
+            // user-facing controls — change them by rebuilding with new
+            // values in android/local.properties.
 
             state.statusMessage?.let { message ->
                 Text(
