@@ -96,6 +96,22 @@ def create_app() -> FastAPI:
     # Admin: factory reset.
     app.include_router(admin_api.router)
 
+    # Auth-debug middleware: logs the last-6 chars of every incoming
+    # Authorization: Bearer header alongside the path. Helps diagnose
+    # token-mismatch vs missing-header bugs from real clients. Cheap
+    # enough to leave on at personal-use volume.
+    @app.middleware("http")
+    async def log_auth_header(request: Request, call_next):
+        auth = request.headers.get("authorization") or ""
+        tail = "(none)"
+        if auth.lower().startswith("bearer "):
+            token = auth[7:].strip()
+            tail = f"len={len(token)} ...{token[-6:]}" if token else "(empty)"
+        elif auth:
+            tail = f"raw='{auth[:20]}...'"
+        log.info("auth.debug", path=request.url.path, token=tail)
+        return await call_next(request)
+
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(_: Request, exc: StarletteHTTPException):
         return JSONResponse(
