@@ -451,36 +451,16 @@ private fun TimeRow(
 private fun FirstGoalStep(state: OnboardingUiState, vm: OnboardingViewModel) {
     StepHeading(
         title = "First goal",
-        subtitle = "Optional. One concrete thing you want to track right now. You can add more from the Goals tab later.",
+        subtitle = "What's the most important thing you want to work on? One sentence — I'll fill in the rest later.",
     )
     Spacer(Modifier.height(20.dp))
 
     OutlinedTextField(
         value = state.firstGoalStatement,
         onValueChange = vm::setFirstGoalStatement,
-        label = { Text("Statement") },
-        placeholder = { Text("e.g. Read 24 books this year") },
+        placeholder = { Text("e.g. ship Buddy v1 by August") },
         modifier = Modifier.fillMaxWidth(),
     )
-    Spacer(Modifier.height(8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = state.firstGoalAmount,
-            onValueChange = vm::setFirstGoalAmount,
-            label = { Text("Daily target") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1f),
-        )
-        OutlinedTextField(
-            value = state.firstGoalUnit,
-            onValueChange = vm::setFirstGoalUnit,
-            label = { Text("Unit") },
-            placeholder = { Text("pages, minutes…") },
-            singleLine = true,
-            modifier = Modifier.weight(1f),
-        )
-    }
 
     Spacer(Modifier.height(20.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -494,7 +474,7 @@ private fun FirstGoalStep(state: OnboardingUiState, vm: OnboardingViewModel) {
                 CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.size(6.dp))
             }
-            Text(if (state.firstGoalStatement.isBlank()) "Continue" else "Add goal")
+            Text(if (state.firstGoalStatement.isBlank()) "Continue" else "Save goal")
         }
     }
 }

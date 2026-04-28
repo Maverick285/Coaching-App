@@ -1,81 +1,108 @@
-"""Persona calibration intake — v2.
+"""Persona calibration intake — v3 (Noom-style).
 
-Designed for ADHD users: tap-driven, paired-sample choices for the bits
-that matter, scales for axes that have established research lineage,
-and only a handful of short text inputs. ~12 prompts total, ~5 minutes.
+Tap-driven, friendly, one optional text input. The user is on a phone
+with ADHD; every screen they have to type on is a screen we lose them on.
 
-Maps to the six calibration axes the spec defined (warmth, directness,
-humor, pace, failure register, pushback tendency), grounded in the
-coaching/therapy research the spec cites (Passmore 2010 + Ives 2008 on
-the directive-nondirective continuum, Knouse on CBT-for-ADHD,
-therapeutic-alliance work on bond-via-paired-samples).
+Flow (10 questions, ~3 minutes):
+  1.  Name (text, optional, soft warm-up)
+  2.  Work shape (chips, multi)
+  3.  Where ADHD shows up (chips, multi)
+  4-7. Sample-exchange A/B for failure / check-in / drift / good day
+       — the calibration core, picks voice without self-description
+  8.  Pace (1-5 scale)
+  9.  Humor (1-5 scale)
+  10. Pushback tendency (1-5 scale)
+  11. Lifestyle topics to engage proactively (chips, multi)
 
-Question kinds:
-  - text_short  — single-line text (name, one-liner)
-  - text_long   — paragraph
-  - pair_choice — A vs B sample exchange; user picks the one that
-                  feels right. Most reliable signal (bypasses
-                  self-description).
-  - scale       — 5-point scale on a named axis with low/high anchors.
-  - multi_choice — pick zero or more from a list (lifestyle topics).
+Order is deliberate: friendly identity first → narrow ADHD context →
+voice calibration via sample-exchanges (least loaded for the user) →
+preference scales → finally lifestyle stance.
+
+Question kinds (interpreted by the Android client):
+  text_short   single-line text
+  pair_choice  A vs B sample exchange
+  scale        1..5 with low/high anchors
+  multi_choice zero+ chip selections
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-# Schema-as-dicts so it's easy to ship to the Android client without an
-# enum-roundtrip; the client just renders by `kind`.
 INTAKE_QUESTIONS_V2: list[dict[str, Any]] = [
-    # --- Section 1: Identity (3 short text answers) -----------------------
+    # 1. Identity — single optional text. Sets a friendly opener.
     {
         "key": "name",
         "kind": "text_short",
-        "prompt": "What should I call you? Your first name or a nickname you like. Leave blank to stay 'Coach'.",
+        "prompt": "What should I call you?",
         "axis": "naming",
         "optional": True,
     },
+
+    # 2. Work shape — multi-chip. Replaces the old "one sentence about
+    # what you do" open-ended question. Multi-select because plenty of
+    # people do more than one kind of work.
     {
-        "key": "occupation",
-        "kind": "text_short",
-        "prompt": "One sentence: what do you do?",
+        "key": "work_shape",
+        "kind": "multi_choice",
+        "prompt": "What kind of work fills most of your day?",
         "axis": "identity",
-        "optional": False,
-    },
-    {
-        "key": "adhd_pattern",
-        "kind": "text_long",
-        "prompt": "Briefly: how does your ADHD show up day-to-day? No need to be clinical — 'great at hyperfocus, terrible at starting' kind of answer is great.",
-        "axis": "identity",
-        "optional": False,
+        "options": [
+            {"id": "creative", "label": "Creative / writing"},
+            {"id": "engineering", "label": "Engineering / building"},
+            {"id": "management", "label": "Leading a team"},
+            {"id": "research", "label": "Research / analysis"},
+            {"id": "service", "label": "Helping people"},
+            {"id": "physical", "label": "Hands-on / physical"},
+            {"id": "school", "label": "School / studying"},
+            {"id": "other", "label": "Something else"},
+        ],
     },
 
-    # --- Section 2: Sample-exchange A/B (4 pairs) -------------------------
-    # The spec calls for sample-exchange ratings explicitly. Most reliable
-    # calibration signal because users pick a voice they'd want without
-    # having to articulate why.
+    # 3. ADHD signature — multi-chip in the user's voice. Replaces the
+    # "describe how your ADHD shows up" paragraph.
+    {
+        "key": "adhd_signature",
+        "kind": "multi_choice",
+        "prompt": "Which of these tend to trip you up?",
+        "axis": "identity",
+        "options": [
+            {"id": "starting", "label": "Starting things"},
+            {"id": "finishing", "label": "Finishing things"},
+            {"id": "focus", "label": "Holding focus"},
+            {"id": "time_blind", "label": "Time blindness"},
+            {"id": "overthinking", "label": "Overthinking"},
+            {"id": "forgetting", "label": "Forgetting things"},
+            {"id": "impulsive", "label": "Impulse control"},
+            {"id": "intensity", "label": "Emotional intensity"},
+        ],
+    },
+
+    # 4-7. Sample-exchange A/B — the calibration spine. Most reliable
+    # signal because users pick a voice they'd want without having to
+    # articulate why.
     {
         "key": "sample_failure_register",
         "kind": "pair_choice",
-        "prompt": "After you miss a session you said you'd do, the response that would actually help you get back on the horse is...",
+        "prompt": "You miss a session you'd planned. Which response would actually help you bounce back?",
         "axis": "failure_register",
         "options": [
             {
                 "id": "matter_of_fact",
                 "label": "Matter-of-fact",
-                "body": "You missed today. Tomorrow at 6 is the next slot. In?",
+                "body": "Missed today. Tomorrow at 6 is the next slot. In?",
             },
             {
                 "id": "warm_curious",
                 "label": "Warm + curious",
-                "body": "Hey, things happen. What got in the way?",
+                "body": "Hey — things happen. What got in the way?",
             },
         ],
     },
     {
         "key": "sample_check_in",
         "kind": "pair_choice",
-        "prompt": "Mid-focus-session check-in I'd actually want is...",
+        "prompt": "Mid-task check-in you'd actually want from me…",
         "axis": "pace_and_directness",
         "options": [
             {
@@ -86,20 +113,20 @@ INTAKE_QUESTIONS_V2: list[dict[str, Any]] = [
             {
                 "id": "task_anchored",
                 "label": "Task-anchored",
-                "body": "Thirty min in. You said the runsheet — on it?",
+                "body": "Thirty minutes in. Still on the runsheet?",
             },
         ],
     },
     {
         "key": "sample_drift_call",
         "kind": "pair_choice",
-        "prompt": "When you've been off-task for a bit, the call-out I'd take well is...",
+        "prompt": "When you've drifted off-task, which call-out lands without making you defensive?",
         "axis": "directness",
         "options": [
             {
                 "id": "named_signal",
-                "label": "Named the signal",
-                "body": "I notice 12 minutes on Twitter. The work is still open.",
+                "label": "Names the signal",
+                "body": "Twelve minutes on Twitter. The work is still open.",
             },
             {
                 "id": "soft_ask",
@@ -111,7 +138,7 @@ INTAKE_QUESTIONS_V2: list[dict[str, Any]] = [
     {
         "key": "sample_good_day",
         "kind": "pair_choice",
-        "prompt": "After a good day, the recognition that lands is...",
+        "prompt": "After a genuinely good day — which acknowledgment lands?",
         "axis": "warmth",
         "options": [
             {
@@ -127,37 +154,37 @@ INTAKE_QUESTIONS_V2: list[dict[str, Any]] = [
         ],
     },
 
-    # --- Section 3: Calibration scales (3 axes) ---------------------------
+    # 8-10. Calibration scales.
     {
         "key": "scale_pace",
         "kind": "scale",
-        "prompt": "How long should my responses run by default?",
+        "prompt": "How long should my replies usually be?",
         "axis": "pace",
-        "scale_low": "Short, dense",
+        "scale_low": "Short and dense",
         "scale_high": "Longer, conversational",
     },
     {
         "key": "scale_humor",
         "kind": "scale",
-        "prompt": "Humor.",
+        "prompt": "Humor — how much?",
         "axis": "humor",
-        "scale_low": "None — keep it clean",
+        "scale_low": "None, keep it clean",
         "scale_high": "Playful when it fits",
     },
     {
         "key": "scale_pushback",
         "kind": "scale",
-        "prompt": "When I disagree with you, how much do I push?",
+        "prompt": "When I disagree with you, how much should I push?",
         "axis": "pushback",
         "scale_low": "Defer — you know best",
         "scale_high": "Push back when I think you're wrong",
     },
 
-    # --- Section 4: Lifestyle stance (multi-select) -----------------------
+    # 11. Lifestyle stance — multi-chip.
     {
         "key": "lifestyle_topics",
         "kind": "multi_choice",
-        "prompt": "Which lifestyle topics should I engage with proactively (vs. only when you raise them)?",
+        "prompt": "Which of these should I bring up on my own (vs. only when you ask)?",
         "axis": "lifestyle",
         "options": [
             {"id": "sleep", "label": "Sleep"},
@@ -168,40 +195,30 @@ INTAKE_QUESTIONS_V2: list[dict[str, Any]] = [
             {"id": "finances", "label": "Finances"},
         ],
     },
-
-    # --- Section 5: Free-form catch-all -----------------------------------
-    {
-        "key": "free_form",
-        "kind": "text_long",
-        "prompt": "Anything else I should know about how you want this to feel? (skippable)",
-        "axis": "free_form",
-        "optional": True,
-    },
 ]
 
 
-# --- Synthesis prompt for v2 -------------------------------------------------
+# --- Synthesis prompt --------------------------------------------------------
 
 SYNTHESIS_PROMPT_V2 = """You are running the persona calibration synthesis pass.
 
-You receive structured intake answers from the user across several question kinds:
-  - text_short / text_long : free-form text
-  - pair_choice            : the user picked option A or B from two sample exchanges
-  - scale                  : 1..5 on a named axis with low/high anchors
-  - multi_choice           : zero or more selected ids from a list
+You receive structured intake answers from the user across these question kinds:
+  - text_short   : a single-line text answer
+  - pair_choice  : the user picked option A or B from two sample exchanges
+  - scale        : 1..5 on a named axis with low/high anchors
+  - multi_choice : zero+ selected ids from a list
 
 Map these to the six calibration axes the system uses:
   warmth, directness, humor, pace, failure_register, pushback_tendency.
 
 How to read each kind:
-  - pair_choice answers are the most reliable signal — they bypass self-description.
-    Weight them heavily.
-  - scale answers confirm or refine the pair_choice signal.
-  - text answers (especially free_form) can override anything else if the user
-    explicitly asked for it.
+  - pair_choice answers are the most reliable signal — they bypass
+    self-description. Weight them heavily.
+  - scale answers refine the pair_choice signal.
+  - multi_choice answers describe context + lifestyle stance, not voice.
 
-Your job: produce two markdown documents and a name choice. Output a single JSON
-object with exactly these keys (no fences, no prose):
+Your job: produce two markdown documents and a name choice. Output a single
+JSON object with exactly these keys (no fences, no prose):
 
   {
     "persona_md": string,    // full PERSONA.md contents
@@ -238,20 +255,20 @@ PERSONA.md must follow this structure:
 <compliant / calibrated / contrarian>
 
 ## Free-form Guidance
-<2-6 sentences describing the calibrated voice>
+<2-6 sentences describing the calibrated voice in concrete terms>
 
 ## Sample Exchanges
 <4-6 short exchanges showing the calibrated voice across: routine question,
 failure acknowledgment, pushback, difficult honesty, lifestyle-topic surfacing,
 proactive observation. Echo the option the user chose for the failure /
-check-in / drift / good-day exchanges.>
+check-in / drift / good-day pair_choice questions.>
 
 ## Behavioral Anchors
 <bullet list of dos and don'ts derived from the calibration>
 
 ## Lifestyle Topic Stance
 <which topics are engaged proactively vs. only when raised, based on the
-multi_choice answer>
+lifestyle_topics multi_choice answer>
 ```
 
 MEMORY.md must follow this structure:
@@ -259,17 +276,15 @@ MEMORY.md must follow this structure:
 ```
 # About <user>
 
-## Profession and Work
-<from the occupation answer; one sentence>
+## Work
+<from the work_shape multi_choice — short, in plain English>
 
-## Cognitive Profile
-<from the adhd_pattern answer; verbatim is fine if it's clear>
+## ADHD Signature
+<from the adhd_signature multi_choice — list the patterns the user marked,
+phrased as observations the persona can refer back to>
 
 ## Communication Preferences
 <inferred from the calibration axes — short summary>
-
-## Stated Values
-<inferred from free_form if available; else 'not yet recorded — to be learned'>
 ```
 
 Be concrete. Avoid fluff. The user is high-IQ and will read this carefully.
@@ -319,7 +334,7 @@ def build_synthesis_user_message_v2(transcript: list[dict[str, Any]], user_name:
     return "\n".join(parts)
 
 
-# --- Back-compat exports for the old CLI/tests still importing these ---
+# --- Back-compat exports -----------------------------------------------------
 
 INTAKE_QUESTIONS = INTAKE_QUESTIONS_V2
 SYNTHESIS_PROMPT = SYNTHESIS_PROMPT_V2
