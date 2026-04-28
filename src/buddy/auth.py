@@ -16,8 +16,11 @@ async def require_auth(authorization: str | None = Header(default=None)) -> bool
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or malformed Authorization header.",
         )
+    # Both sides get .strip()-ed: protects against a trailing newline that
+    # snuck into the .env file or a stray space the client tacked on.
     token = authorization[7:].strip()
-    if not secrets.compare_digest(token, settings.auth_token):
+    expected = (settings.auth_token or "").strip()
+    if not secrets.compare_digest(token, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token.",
