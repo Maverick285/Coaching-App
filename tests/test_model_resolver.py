@@ -8,7 +8,7 @@ from buddy.llm.models import ModelTier, resolve_all_tiers, resolve_model
 
 def test_default_resolution_returns_current():
     tiers = resolve_all_tiers()
-    assert tiers["fast"].startswith("claude-haiku")
+    assert tiers["fast"].startswith("claude-sonnet")
     assert tiers["reasoning"].startswith("claude-opus")
 
 
