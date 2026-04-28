@@ -42,8 +42,17 @@ data class CustomizeUiState(
     val usage: UsageResponse? = null,
     val resetting: Boolean = false,
     val resetDone: Boolean = false,
+    val resetSummary: ResetSummary? = null,
     val message: String? = null,
     val error: String? = null,
+)
+
+/** Server-confirmed tally so the user can see exactly what was wiped. */
+data class ResetSummary(
+    val tableCount: Int,
+    val fileCount: Int,
+    val tables: List<String>,
+    val files: List<String>,
 )
 
 class CustomizeViewModel(
@@ -206,9 +215,9 @@ class CustomizeViewModel(
         val a = api ?: return
         if (_state.value.resetting) return
         viewModelScope.launch {
-            _state.update { it.copy(resetting = true, error = null) }
+            _state.update { it.copy(resetting = true, error = null, resetSummary = null) }
             try {
-                a.adminReset(AdminResetRequest(confirm = "RESET"))
+                val resp = a.adminReset(AdminResetRequest(confirm = "RESET"))
                 settingsRepo.setOnboardingComplete(false)
                 settingsRepo.clearSessionId()
                 // Drop any custom backend URL/token overrides so the
@@ -218,11 +227,35 @@ class CustomizeViewModel(
                     it.copy(
                         resetting = false,
                         resetDone = true,
-                        message = "Wiped. Restart the app to re-onboard.",
+                        // Hand back the server's per-table tally so the
+                        // user can verify the wipe really happened. The
+                        // old behavior just popped a snackbar that
+                        // vanished in 3 seconds — easy to miss.
+                        resetSummary = ResetSummary(
+                            tableCount = resp.clearedTables.size,
+                            fileCount = resp.clearedFiles.size,
+                            tables = resp.clearedTables,
+                            files = resp.clearedFiles,
+                        ),
+                    )
+                }
+            } catch (e: retrofit2.HttpException) {
+                val body = runCatching {
+                    e.response()?.errorBody()?.string().orEmpty().take(400)
+                }.getOrNull().orEmpty()
+                _state.update {
+                    it.copy(
+                        resetting = false,
+                        error = "Reset failed (HTTP ${e.code()}): $body",
                     )
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(resetting = false, error = e.message) }
+                _state.update {
+                    it.copy(
+                        resetting = false,
+                        error = "Reset failed: ${e.javaClass.simpleName}: ${e.message ?: "no message"}",
+                    )
+                }
             }
         }
     }

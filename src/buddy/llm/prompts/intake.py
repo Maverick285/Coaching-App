@@ -30,11 +30,25 @@ from __future__ import annotations
 from typing import Any
 
 INTAKE_QUESTIONS_V2: list[dict[str, Any]] = [
-    # 1. Identity — single optional text. Sets a friendly opener.
+    # 1. User name. Optional — sets a friendly opener for the persona.
+    # Key is `user_name` (not just `name`) so it can't be confused with
+    # the persona-name slot during synthesis.
     {
-        "key": "name",
+        "key": "user_name",
         "kind": "text_short",
         "prompt": "What should I call you?",
+        "axis": "naming",
+        "optional": True,
+    },
+
+    # 2. Persona name. Optional with the default "Coach" baked in.
+    # Until both questions exist users couldn't actually name their
+    # coach — and the synthesis model would conflate this with the
+    # user's name.
+    {
+        "key": "persona_name",
+        "kind": "text_short",
+        "prompt": "And what should I call your coach? (default: Coach)",
         "axis": "naming",
         "optional": True,
     },
@@ -221,9 +235,12 @@ Your job: produce two markdown documents and a name choice. Output a single
 JSON object with exactly these keys (no fences, no prose):
 
   {
-    "persona_md": string,    // full PERSONA.md contents
-    "memory_md":  string,    // full MEMORY.md contents
-    "name":       string     // chosen persona name, or "Coach" if none chosen
+    "persona_md":   string,    // full PERSONA.md contents
+    "memory_md":    string,    // full MEMORY.md contents
+    "persona_name": string     // what the user said to call the coach,
+                               // or "Coach" if they didn't pick one.
+                               // NEVER use the user's own name here —
+                               // that's the user_name field, separate.
   }
 
 PERSONA.md must follow this structure:

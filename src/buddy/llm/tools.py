@@ -33,15 +33,16 @@ SYNTHESIZE_PERSONA_TOOL: dict[str, Any] = {
                 "type": "string",
                 "description": "Full markdown contents of MEMORY.md.",
             },
-            "name": {
+            "persona_name": {
                 "type": "string",
                 "description": (
-                    "The persona's chosen name. 'Coach' if the user did "
-                    "not provide one."
+                    "What the user said to call THE COACH. Default to "
+                    "'Coach' if the user didn't provide one. Never put "
+                    "the user's own name here — that's a separate field."
                 ),
             },
         },
-        "required": ["persona_md", "memory_md", "name"],
+        "required": ["persona_md", "memory_md", "persona_name"],
     },
 }
 

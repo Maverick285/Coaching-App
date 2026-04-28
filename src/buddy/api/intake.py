@@ -201,7 +201,11 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
 
     persona_md = payload["persona_md"].strip() + "\n"
     memory_md = payload["memory_md"].strip() + "\n"
-    chosen_name = str(payload.get("name") or "").strip()
+    # Accept both keys during a transition window so a deploy that
+    # straddles the rename doesn't corrupt the persona name.
+    chosen_name = str(
+        payload.get("persona_name") or payload.get("name") or ""
+    ).strip()
 
     store = MemoryStore()
     store.write("PERSONA.md", persona_md, commit_message="intake: synthesize PERSONA.md")
@@ -212,15 +216,30 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
     # Persist the persona name + mark onboarded.
     from buddy.services.profile import (
         KEY_PERSONA_NAME,
+        KEY_USER_NAME,
         mark_onboarded,
         set_pref,
     )
+
+    # Pull the user's chosen name out of the transcript so it actually
+    # gets persisted as a preference (instead of forever being whatever
+    # BUDDY_USER_NAME defaults to in env). Tolerate the legacy "name"
+    # key during the rename transition.
+    by_key = {turn.get("key"): turn for turn in transcript if turn.get("key")}
+    raw_un = (
+        by_key.get("user_name", {}).get("answer")
+        or by_key.get("name", {}).get("answer")
+        or ""
+    )
+    chosen_user_name = raw_un.strip() if isinstance(raw_un, str) else ""
 
     factory = get_session_factory()
     async with factory() as db:
         sess = await db.get(IntakeSession, req.intake_id)
         if sess is not None:
             sess.finalized_at = datetime.utcnow()
+        if chosen_user_name:
+            await set_pref(db, KEY_USER_NAME, chosen_user_name)
         if chosen_name and chosen_name.lower() != "coach":
             await set_pref(db, KEY_PERSONA_NAME, chosen_name)
         await db.commit()
@@ -330,12 +349,24 @@ def _render_local_synthesis(transcript: list[dict], user_name_default: str) -> d
     """Render PERSONA.md / MEMORY.md / name from structured answers, no LLM."""
     by_key = {turn.get("key"): turn for turn in transcript if turn.get("key")}
 
-    name_turn = by_key.get("name", {})
-    chosen_name = ""
-    raw_name = name_turn.get("answer", "")
-    if isinstance(raw_name, str) and raw_name.strip():
-        chosen_name = raw_name.strip()
-    user_label = chosen_name if chosen_name else user_name_default
+    # User name (what we call them) and persona name (what they call
+    # the coach) are separate intake answers — the bug we just fixed
+    # was conflating these so the persona ended up named "Maverick".
+    raw_user_name = by_key.get("user_name", {}).get("answer", "")
+    if not (isinstance(raw_user_name, str) and raw_user_name.strip()):
+        # Back-compat: tolerate transcripts from before the rename.
+        raw_user_name = by_key.get("name", {}).get("answer", "")
+    user_label = (
+        raw_user_name.strip() if isinstance(raw_user_name, str) and raw_user_name.strip()
+        else user_name_default
+    )
+
+    raw_persona_name = by_key.get("persona_name", {}).get("answer", "")
+    chosen_name = (
+        raw_persona_name.strip()
+        if isinstance(raw_persona_name, str) and raw_persona_name.strip()
+        else ""
+    )
 
     def _pair(key: str) -> tuple[str, str]:
         turn = by_key.get(key, {})
@@ -466,5 +497,5 @@ Pushback tendency: {pushback_label}.
     return {
         "persona_md": persona_md,
         "memory_md": memory_md,
-        "name": chosen_name or "Coach",
+        "persona_name": chosen_name or "Coach",
     }

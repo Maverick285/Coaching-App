@@ -125,6 +125,8 @@ fun AppNavGraph(
                     onOpenFocus = {
                         navController.navigate(Routes.FOCUS) { launchSingleTop = true }
                     },
+                    onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                    onOpenCustomize = { navController.navigate(Routes.CUSTOMIZE) },
                     onOpenGoalDetail = { id ->
                         navController.navigate(Routes.goalDetail(id))
                     },

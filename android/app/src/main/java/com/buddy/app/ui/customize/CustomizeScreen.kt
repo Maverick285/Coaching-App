@@ -68,18 +68,10 @@ fun CustomizeScreen(
     val context = LocalContext.current
     var showResetConfirm by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.resetDone) {
-        if (state.resetDone) {
-            viewModel.onResetHandled()
-            // Restart the activity to land back on onboarding cleanly.
-            val intent = (context.packageManager.getLaunchIntentForPackage(context.packageName))
-                ?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (intent != null) {
-                context.startActivity(intent)
-                if (context is android.app.Activity) context.finish()
-            }
-        }
-    }
+    // Show a confirmation dialog with the server's per-table tally so
+    // the user can see exactly what was wiped, then restart on
+    // dismiss. Old behavior auto-restarted with only a snackbar; user
+    // had no proof anything happened on the server side.
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -307,6 +299,53 @@ fun CustomizeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Server-confirmed wipe summary. Stays on screen until dismissed,
+    // then relaunches the app into onboarding.
+    state.resetSummary?.let { summary ->
+        AlertDialog(
+            onDismissRequest = { },  // require explicit OK
+            title = { Text("Wiped.") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Server cleared ${summary.tableCount} tables and ${summary.fileCount} memory files.",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    if (summary.tables.isNotEmpty()) {
+                        Text(
+                            "Tables: " + summary.tables.joinToString(", "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (summary.files.isNotEmpty()) {
+                        Text(
+                            "Files: " + summary.files.joinToString(", "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        "App will relaunch into onboarding when you tap OK.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.onResetHandled()
+                    val intent = context.packageManager
+                        .getLaunchIntentForPackage(context.packageName)
+                        ?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (intent != null) {
+                        context.startActivity(intent)
+                        if (context is android.app.Activity) context.finish()
+                    }
+                }) { Text("OK") }
             },
         )
     }
