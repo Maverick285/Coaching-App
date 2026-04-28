@@ -168,10 +168,8 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
     model = resolve_model(ModelTier.REASONING)
 
     # Try the synthesis call up to 3 times. Anthropic transient errors
-    # (overloaded, network blips) and one-off JSON-parse failures
-    # ("the model wandered out of strict JSON") are both common and both
-    # recoverable with a retry. Without this, a flaky network leaves the
-    # user stranded mid-onboarding.
+    # (overloaded, network blips) and one-off JSON-parse failures are
+    # both common and both recoverable with a retry.
     payload: dict | None = None
     last_error: str = ""
     result = None
@@ -194,11 +192,14 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
             last_error = f"Output not JSON (attempt {attempt + 1}): {http_exc.detail}"
             continue
 
+    used_local_fallback = False
     if payload is None:
-        raise HTTPException(
-            502,
-            f"Synthesis failed after 3 attempts. Last error: {last_error}",
-        )
+        # Never strand the user. Build a perfectly serviceable PERSONA.md
+        # / MEMORY.md from the structured answers alone — no LLM needed.
+        # The user can re-synthesize from Customize once the LLM is
+        # cooperating again.
+        payload = _render_local_synthesis(transcript, settings.user_name)
+        used_local_fallback = True
 
     persona_md = payload["persona_md"].strip() + "\n"
     memory_md = payload["memory_md"].strip() + "\n"
@@ -226,18 +227,19 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
             await set_pref(db, KEY_PERSONA_NAME, chosen_name)
         await db.commit()
     await mark_onboarded()
-    async with factory() as db:
-        db.add(
-            ApiUsage(
-                provider="anthropic",
-                model=result.model,
-                operation="intake:synthesize",
-                tokens_in=result.tokens_in,
-                tokens_out=result.tokens_out,
-                cost_usd=result.cost_usd,
+    if not used_local_fallback and result is not None:
+        async with factory() as db:
+            db.add(
+                ApiUsage(
+                    provider="anthropic",
+                    model=result.model,
+                    operation="intake:synthesize",
+                    tokens_in=result.tokens_in,
+                    tokens_out=result.tokens_out,
+                    cost_usd=result.cost_usd,
+                )
             )
-        )
-        await db.commit()
+            await db.commit()
 
     return IntakeFinalizeResponse(
         intake_id=req.intake_id,
@@ -259,3 +261,212 @@ def _parse_synthesis_json(text: str) -> dict:
             500,
             f"Synthesis output was not valid JSON. Got: {text[:500]!r}",
         ) from exc
+
+
+# --- Deterministic synthesis fallback ---------------------------------------
+# When the LLM is overloaded or hands us un-parseable JSON, we still need to
+# finish onboarding with something usable. The structured intake answers are
+# rich enough to render a perfectly serviceable PERSONA.md / MEMORY.md
+# without an LLM call. The user can re-synthesize via Customize later.
+
+_PAIR_TO_LABELS: dict[str, dict[str, str]] = {
+    "sample_failure_register": {
+        "matter_of_fact": "matter-of-fact",
+        "warm_curious": "gentle and curious",
+    },
+    "sample_check_in": {
+        "presence_only": "light, presence-only",
+        "task_anchored": "task-anchored",
+    },
+    "sample_drift_call": {
+        "named_signal": "blunt — names what's happening",
+        "soft_ask": "soft — opens with a question",
+    },
+    "sample_good_day": {
+        "score_only": "concise acknowledgment of the score",
+        "felt_sense": "warmer recognition of the felt-sense",
+    },
+}
+
+_WORK_LABELS = {
+    "creative": "creative work and writing",
+    "engineering": "engineering / building things",
+    "management": "leading a team",
+    "research": "research and analysis",
+    "service": "helping people",
+    "physical": "hands-on work",
+    "school": "school and studying",
+    "other": "other kinds of work",
+}
+
+_ADHD_LABELS = {
+    "starting": "trouble starting things",
+    "finishing": "trouble finishing things",
+    "focus": "holding focus once started",
+    "time_blind": "time blindness",
+    "overthinking": "overthinking",
+    "forgetting": "forgetting commitments",
+    "impulsive": "impulse control",
+    "intensity": "emotional intensity",
+}
+
+_LIFESTYLE_LABELS = {
+    "sleep": "sleep",
+    "exercise": "exercise",
+    "nutrition": "nutrition",
+    "substances": "alcohol / substances",
+    "relationships": "relationships",
+    "finances": "finances",
+}
+
+
+def _scale_label(value: int, low: str, mid: str, high: str) -> str:
+    if value <= 2:
+        return low
+    if value == 3:
+        return mid
+    return high
+
+
+def _render_local_synthesis(transcript: list[dict], user_name_default: str) -> dict:
+    """Render PERSONA.md / MEMORY.md / name from structured answers, no LLM."""
+    by_key = {turn.get("key"): turn for turn in transcript if turn.get("key")}
+
+    name_turn = by_key.get("name", {})
+    chosen_name = ""
+    raw_name = name_turn.get("answer", "")
+    if isinstance(raw_name, str) and raw_name.strip():
+        chosen_name = raw_name.strip()
+    user_label = chosen_name if chosen_name else user_name_default
+
+    def _pair(key: str) -> tuple[str, str]:
+        turn = by_key.get(key, {})
+        ans = turn.get("answer") or {}
+        chosen_id = ans.get("id") if isinstance(ans, dict) else ""
+        label = _PAIR_TO_LABELS.get(key, {}).get(chosen_id or "", "balanced")
+        return chosen_id or "", label
+
+    failure_id, failure_label = _pair("sample_failure_register")
+    checkin_id, checkin_label = _pair("sample_check_in")
+    drift_id, drift_label = _pair("sample_drift_call")
+    goodday_id, goodday_label = _pair("sample_good_day")
+
+    def _scale(key: str, default: int = 3) -> int:
+        turn = by_key.get(key, {})
+        v = turn.get("answer", default)
+        try:
+            return max(1, min(5, int(v)))
+        except (TypeError, ValueError):
+            return default
+
+    pace_v = _scale("scale_pace")
+    humor_v = _scale("scale_humor")
+    pushback_v = _scale("scale_pushback")
+
+    pace_label = _scale_label(pace_v, "terse", "measured", "expansive")
+    humor_label = _scale_label(humor_v, "none", "dry", "playful")
+    pushback_label = _scale_label(
+        pushback_v, "compliant", "calibrated", "contrarian"
+    )
+
+    warmth = "warm" if goodday_id == "felt_sense" else "neutral"
+    directness = "blunt" if drift_id == "named_signal" else "diplomatic"
+    failure_register = (
+        "matter-of-fact" if failure_id == "matter_of_fact" else "gentle"
+    )
+
+    work_ids = by_key.get("work_shape", {}).get("answer") or []
+    if not isinstance(work_ids, list):
+        work_ids = []
+    adhd_ids = by_key.get("adhd_signature", {}).get("answer") or []
+    if not isinstance(adhd_ids, list):
+        adhd_ids = []
+    lifestyle_ids = by_key.get("lifestyle_topics", {}).get("answer") or []
+    if not isinstance(lifestyle_ids, list):
+        lifestyle_ids = []
+
+    work_phrases = [_WORK_LABELS.get(i, i) for i in work_ids]
+    adhd_phrases = [_ADHD_LABELS.get(i, i) for i in adhd_ids]
+    lifestyle_phrases = [_LIFESTYLE_LABELS.get(i, i) for i in lifestyle_ids]
+
+    proactive_clause = (
+        "Engage proactively about: " + ", ".join(lifestyle_phrases) + "."
+        if lifestyle_phrases
+        else "Don't volunteer lifestyle topics unless the user raises them."
+    )
+
+    persona_md = f"""# Persona Profile
+
+## Name
+{chosen_name or "Coach"}
+
+## Calibration Axes
+
+### Warmth
+{warmth}
+
+### Directness
+{directness}
+
+### Humor
+{humor_label}
+
+### Pace
+{pace_label}
+
+### Failure Register
+{failure_register}
+
+### Pushback Tendency
+{pushback_label}
+
+## Free-form Guidance
+You are {user_label}'s coach. Default to {pace_label} replies; lean
+{warmth} but {directness}. After failures, respond {failure_label}.
+On mid-task check-ins, default to {checkin_label}. When {user_label}
+drifts off-task, your call-out is {drift_label}. After a good day,
+your acknowledgment is {goodday_label}.
+
+## Sample Exchanges
+- Routine question — answer in 1-2 sentences, plain text, no headers.
+- Failure ack — "{_PAIR_TO_LABELS['sample_failure_register'].get(failure_id, '')}" voice.
+- Drift call — "{_PAIR_TO_LABELS['sample_drift_call'].get(drift_id, '')}" voice.
+- Good-day ack — "{_PAIR_TO_LABELS['sample_good_day'].get(goodday_id, '')}" voice.
+
+## Behavioral Anchors
+- Don't open replies with "I" or with sycophantic openers.
+- Default reply length follows the pace setting above.
+- Pushback tendency: {pushback_label}.
+- {proactive_clause}
+
+## Lifestyle Topic Stance
+{proactive_clause}
+"""
+
+    work_section = (
+        ", ".join(work_phrases).capitalize() + "." if work_phrases else "Not specified."
+    )
+    adhd_section = (
+        "Patterns the user identified: " + "; ".join(adhd_phrases) + "."
+        if adhd_phrases
+        else "Not specified."
+    )
+    pace_word = pace_label
+    memory_md = f"""# About {user_label}
+
+## Work
+{work_section}
+
+## ADHD Signature
+{adhd_section}
+
+## Communication Preferences
+Prefers {pace_word}, {humor_label}-humor replies. Failure register: {failure_register}.
+Pushback tendency: {pushback_label}.
+"""
+
+    return {
+        "persona_md": persona_md,
+        "memory_md": memory_md,
+        "name": chosen_name or "Coach",
+    }
