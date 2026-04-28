@@ -12,12 +12,13 @@ from sqlalchemy import select
 from buddy.auth import require_auth
 from buddy.config import get_settings
 from buddy.db import get_session_factory
-from buddy.llm.client import chat
+from buddy.llm.client import chat, chat_with_tool
 from buddy.llm.models import ModelTier, resolve_model
 from buddy.llm.prompts.planning import (
     WOOP_SYSTEM,
     build_woop_user_message,
 )
+from buddy.llm.tools import PROPOSE_WOOP_PLAN_TOOL
 from buddy.models import (
     ApiUsage,
     Goal,
@@ -331,7 +332,9 @@ def _strip_fences(text: str) -> str:
 
 @router.post("/goals/woop", response_model=WoopResponse, dependencies=[Depends(require_auth)])
 async def run_woop(req: WoopRequest) -> WoopResponse:
-    """Run WOOP synthesis on a wish; return a structured plan the caller can review."""
+    """Run WOOP synthesis on a wish; return a structured plan the caller
+    can review. Uses Anthropic native tool-use for reliable structured
+    output (no regex JSON parsing)."""
     settings = get_settings()
     model = resolve_model(ModelTier.REASONING)
     user_msg = build_woop_user_message(
@@ -340,23 +343,26 @@ async def run_woop(req: WoopRequest) -> WoopResponse:
         desired_pace_unit=req.desired_pace_unit,
         user_name=settings.user_name,
     )
-    try:
-        result = await chat(
-            model=model,
-            system=WOOP_SYSTEM,
-            messages=[{"role": "user", "content": user_msg}],
-            max_tokens=2048,
-            temperature=0.4,
-        )
-    except Exception as exc:
-        raise HTTPException(502, f"WOOP synthesis failed: {exc}") from exc
-
-    try:
-        payload = json.loads(_strip_fences(result.text))
-    except json.JSONDecodeError as exc:
-        raise HTTPException(
-            502, f"WOOP output was not valid JSON: {result.text[:500]!r}"
-        ) from exc
+    last_error = ""
+    payload: dict | None = None
+    result = None
+    for attempt in range(2):
+        try:
+            result = await chat_with_tool(
+                model=model,
+                system=WOOP_SYSTEM,
+                messages=[{"role": "user", "content": user_msg}],
+                tool=PROPOSE_WOOP_PLAN_TOOL,
+                max_tokens=2048,
+                temperature=0.4 if attempt == 0 else 0.2,
+            )
+            payload = result.tool_input
+            break
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+    if payload is None or result is None:
+        raise HTTPException(502, f"WOOP synthesis failed: {last_error}")
 
     factory = get_session_factory()
     async with factory() as db:

@@ -66,6 +66,60 @@ def mock_chat(monkeypatch):
     return default
 
 
+@dataclass
+class FakeToolResult:
+    tool_name: str
+    tool_input: dict
+    text: str = ""
+    model: str = "fake-model"
+    tokens_in: int = 100
+    tokens_out: int = 50
+    cost_usd: float = 0.001
+    raw: Any = None
+
+
+def fake_tool_returning(
+    *results: FakeToolResult | dict,
+    default_tool_name: str = "synthesize",
+) -> AsyncMock:
+    """Build an async mock for `chat_with_tool()` that returns the supplied
+    typed tool inputs in order. Bare dicts are wrapped as FakeToolResults
+    using `default_tool_name`.
+    """
+    queue: list[FakeToolResult] = []
+    for r in results:
+        if isinstance(r, dict):
+            queue.append(FakeToolResult(tool_name=default_tool_name, tool_input=r))
+        else:
+            queue.append(r)
+    counter = {"i": 0}
+
+    async def _impl(**kwargs: Any) -> FakeToolResult:
+        i = counter["i"]
+        if i >= len(queue):
+            return queue[-1]
+        counter["i"] += 1
+        result = queue[i]
+        # If the test didn't pin a tool name, take the one the call
+        # specified — keeps assertions simpler.
+        if result.tool_name == default_tool_name:
+            tool = kwargs.get("tool")
+            if tool and isinstance(tool, dict) and "name" in tool:
+                result = FakeToolResult(
+                    tool_name=tool["name"],
+                    tool_input=result.tool_input,
+                    text=result.text,
+                    model=result.model,
+                    tokens_in=result.tokens_in,
+                    tokens_out=result.tokens_out,
+                    cost_usd=result.cost_usd,
+                    raw=result.raw,
+                )
+        return result
+
+    return AsyncMock(side_effect=_impl)
+
+
 @pytest.fixture
 def mock_embed(monkeypatch):
     """Embeddings are off in test mode (no OpenAI key)."""

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
-import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from buddy.config import get_settings
 from buddy.db import get_session_factory
-from buddy.llm.client import chat
+from buddy.llm.client import chat_with_tool
+from buddy.llm.tools import PROPOSE_CONSOLIDATION_TOOL
 from buddy.llm.models import ModelTier, resolve_model
 from buddy.llm.prompts.consolidation import CONSOLIDATION_SYSTEM
 from buddy.logging_setup import get_logger
@@ -30,14 +29,6 @@ def _load_conversations_for(store: MemoryStore, day: date) -> str:
         parts.append(f"\n----- {f.name} -----\n")
         parts.append(f.read_text(encoding="utf-8"))
     return "\n".join(parts)
-
-
-def _strip_fences(text: str) -> str:
-    cleaned = text.strip()
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, re.DOTALL)
-    if fence:
-        cleaned = fence.group(1)
-    return cleaned
 
 
 async def run_consolidation(*, for_date: date | None = None) -> dict:
@@ -66,18 +57,20 @@ async def run_consolidation(*, for_date: date | None = None) -> dict:
     model = resolve_model(ModelTier.REASONING)
     last_err: Exception | None = None
     payload = None
+    result = None
     for attempt in range(2):
         try:
-            result = await chat(
+            result = await chat_with_tool(
                 model=model,
                 system=CONSOLIDATION_SYSTEM,
                 messages=[{"role": "user", "content": user_payload}],
+                tool=PROPOSE_CONSOLIDATION_TOOL,
                 max_tokens=4096,
                 temperature=0.3,
             )
-            payload = json.loads(_strip_fences(result.text))
+            payload = result.tool_input
             break
-        except (json.JSONDecodeError, Exception) as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             last_err = exc
             log.warn("consolidation.parse_failed", attempt=attempt, error=str(exc))
 

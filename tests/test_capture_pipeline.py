@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from tests._helpers import (
-    capture_classify_response,
-    fake_chat_returning,
-)
+from tests._helpers import FakeToolResult, fake_tool_returning
+
+
+def _capture_mock(actions: list, fallback: str = "") -> object:
+    return fake_tool_returning(
+        FakeToolResult(
+            tool_name="classify_capture",
+            tool_input={"actions": actions, "fallback_message": fallback},
+        ),
+    )
 
 
 def _make_goal(client, **overrides):
@@ -24,23 +30,21 @@ def _make_goal(client, **overrides):
 def test_capture_classify_returns_actions(authed_client, monkeypatch):
     goal = _make_goal(authed_client)
     monkeypatch.setattr(
-        "buddy.api.capture.chat",
-        fake_chat_returning(
-            capture_classify_response(
-                [
-                    {
-                        "kind": "log_progress",
-                        "summary": "Log 18 pages on Reading.",
-                        "payload": {
-                            "goal_id": goal["id"],
-                            "attributed_units": 18.0,
-                            "unit_label": "pages",
-                            "raw_text": "read 18 pages",
-                        },
-                        "confidence": 0.9,
-                    }
-                ]
-            )
+        "buddy.api.capture.chat_with_tool",
+        _capture_mock(
+            [
+                {
+                    "kind": "log_progress",
+                    "summary": "Log 18 pages on Reading.",
+                    "payload": {
+                        "goal_id": goal["id"],
+                        "attributed_units": 18.0,
+                        "unit_label": "pages",
+                        "raw_text": "read 18 pages",
+                    },
+                    "confidence": 0.9,
+                }
+            ]
         ),
     )
 
@@ -58,23 +62,21 @@ def test_capture_classify_returns_actions(authed_client, monkeypatch):
 def test_capture_confirm_dispatches_log_progress(authed_client, monkeypatch):
     goal = _make_goal(authed_client)
     monkeypatch.setattr(
-        "buddy.api.capture.chat",
-        fake_chat_returning(
-            capture_classify_response(
-                [
-                    {
-                        "kind": "log_progress",
-                        "summary": "Log 18 pages on Reading.",
-                        "payload": {
-                            "goal_id": goal["id"],
-                            "attributed_units": 18.0,
-                            "unit_label": "pages",
-                            "raw_text": "read 18 pages",
-                        },
-                        "confidence": 0.9,
-                    }
-                ]
-            )
+        "buddy.api.capture.chat_with_tool",
+        _capture_mock(
+            [
+                {
+                    "kind": "log_progress",
+                    "summary": "Log 18 pages on Reading.",
+                    "payload": {
+                        "goal_id": goal["id"],
+                        "attributed_units": 18.0,
+                        "unit_label": "pages",
+                        "raw_text": "read 18 pages",
+                    },
+                    "confidence": 0.9,
+                }
+            ]
         ),
     )
 
@@ -100,21 +102,19 @@ def test_capture_confirm_dispatches_log_progress(authed_client, monkeypatch):
 
 def test_capture_dispatches_journal_note(authed_client, monkeypatch):
     monkeypatch.setattr(
-        "buddy.api.capture.chat",
-        fake_chat_returning(
-            capture_classify_response(
-                [
-                    {
-                        "kind": "journal_note",
-                        "summary": "Add a journal note.",
-                        "payload": {
-                            "content": "felt clear-headed after the workout",
-                            "mood": "clear",
-                        },
-                        "confidence": 0.95,
-                    }
-                ]
-            )
+        "buddy.api.capture.chat_with_tool",
+        _capture_mock(
+            [
+                {
+                    "kind": "journal_note",
+                    "summary": "Add a journal note.",
+                    "payload": {
+                        "content": "felt clear-headed after the workout",
+                        "mood": "clear",
+                    },
+                    "confidence": 0.95,
+                }
+            ]
         ),
     )
     classify = authed_client.post(
@@ -138,34 +138,32 @@ def test_capture_partial_failure_does_not_block_other_actions(
 ):
     goal = _make_goal(authed_client)
     monkeypatch.setattr(
-        "buddy.api.capture.chat",
-        fake_chat_returning(
-            capture_classify_response(
-                [
-                    {
-                        "kind": "log_progress",
-                        "summary": "Log 18 pages.",
-                        "payload": {
-                            "goal_id": goal["id"],
-                            "attributed_units": 18.0,
-                            "unit_label": "pages",
-                            "raw_text": "18 pages",
-                        },
-                        "confidence": 0.9,
+        "buddy.api.capture.chat_with_tool",
+        _capture_mock(
+            [
+                {
+                    "kind": "log_progress",
+                    "summary": "Log 18 pages.",
+                    "payload": {
+                        "goal_id": goal["id"],
+                        "attributed_units": 18.0,
+                        "unit_label": "pages",
+                        "raw_text": "18 pages",
                     },
-                    {
-                        "kind": "log_progress",
-                        "summary": "Log to non-existent goal.",
-                        "payload": {
-                            "goal_id": 99999,
-                            "attributed_units": 5.0,
-                            "unit_label": "x",
-                            "raw_text": "stale ref",
-                        },
-                        "confidence": 0.3,
+                    "confidence": 0.9,
+                },
+                {
+                    "kind": "log_progress",
+                    "summary": "Log to non-existent goal.",
+                    "payload": {
+                        "goal_id": 99999,
+                        "attributed_units": 5.0,
+                        "unit_label": "x",
+                        "raw_text": "stale ref",
                     },
-                ]
-            )
+                    "confidence": 0.3,
+                },
+            ]
         ),
     )
 
@@ -182,10 +180,8 @@ def test_capture_partial_failure_does_not_block_other_actions(
 
 def test_capture_empty_actions_with_fallback(authed_client, monkeypatch):
     monkeypatch.setattr(
-        "buddy.api.capture.chat",
-        fake_chat_returning(
-            capture_classify_response([], fallback="Couldn't tell what to do.")
-        ),
+        "buddy.api.capture.chat_with_tool",
+        _capture_mock([], fallback="Couldn't tell what to do."),
     )
     r = authed_client.post("/capture", json={"text": "garbled words"}).json()
     assert r["actions"] == []

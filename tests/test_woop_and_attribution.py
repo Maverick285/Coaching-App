@@ -2,25 +2,32 @@
 
 from __future__ import annotations
 
-from tests._helpers import (
-    fake_chat_returning,
-    progress_attribution_response,
-    woop_response,
-)
+from tests._helpers import FakeToolResult, fake_tool_returning
 
 
 def test_woop_returns_structured_plan(authed_client, monkeypatch):
     monkeypatch.setattr(
-        "buddy.api.goals.chat",
-        fake_chat_returning(
-            woop_response(
-                wish="Get to 12% body fat by August",
-                outcome="Vivid scene of fitting into the suit.",
-                obstacles=["Late nights derail diet."],
-                plan=["If it's after 9 PM, then no second helping."],
-                pace_unit="lbs/week",
-                pace_amount=0.4,
-                pace_description="0.4 lb fat loss per week.",
+        "buddy.api.goals.chat_with_tool",
+        fake_tool_returning(
+            FakeToolResult(
+                tool_name="propose_woop_plan",
+                tool_input={
+                    "wish": "Get to 12% body fat by August",
+                    "outcome": "Vivid scene of fitting into the suit.",
+                    "obstacles": ["Late nights derail diet."],
+                    "plan": ["If it's after 9 PM, then no second helping."],
+                    "suggested_intentions": [
+                        {
+                            "cue_type": "obstacle",
+                            "cue_text": "I miss a session",
+                            "response_text": "Do the smallest version that day.",
+                        }
+                    ],
+                    "suggested_tasks": ["Open the file", "Read for 5 minutes"],
+                    "suggested_pace_unit": "lbs/week",
+                    "suggested_pace_amount": 0.4,
+                    "suggested_pace_description": "0.4 lb fat loss per week.",
+                },
             )
         ),
     )
@@ -37,11 +44,11 @@ def test_woop_returns_structured_plan(authed_client, monkeypatch):
     assert body["suggested_pace_unit"] == "lbs/week"
 
 
-def test_woop_invalid_json_is_502(authed_client, monkeypatch):
-    monkeypatch.setattr(
-        "buddy.api.goals.chat",
-        fake_chat_returning("definitely not json"),
-    )
+def test_woop_call_failure_is_502(authed_client, monkeypatch):
+    async def boom(**_):
+        raise RuntimeError("anthropic blew up")
+
+    monkeypatch.setattr("buddy.api.goals.chat_with_tool", boom)
     r = authed_client.post("/goals/woop", json={"wish": "anything"})
     assert r.status_code == 502
 
@@ -57,18 +64,22 @@ def test_progress_freeform_attributes_to_active_goals(authed_client, monkeypatch
         },
     ).json()
     monkeypatch.setattr(
-        "buddy.api.progress.chat",
-        fake_chat_returning(
-            progress_attribution_response(
-                [
-                    {
-                        "goal_id": g["id"],
-                        "units": 30,
-                        "unit_label": "pages",
-                        "confidence": 0.95,
-                        "rationale": "user said '30 pages'",
-                    }
-                ]
+        "buddy.api.progress.chat_with_tool",
+        fake_tool_returning(
+            FakeToolResult(
+                tool_name="attribute_progress",
+                tool_input={
+                    "attributions": [
+                        {
+                            "goal_id": g["id"],
+                            "units": 30,
+                            "unit_label": "pages",
+                            "confidence": 0.95,
+                            "rationale": "user said '30 pages'",
+                        }
+                    ],
+                    "unattributed_text": "",
+                },
             )
         ),
     )
@@ -84,7 +95,6 @@ def test_progress_freeform_attributes_to_active_goals(authed_client, monkeypatch
 
 
 def test_progress_freeform_no_active_goals(authed_client, monkeypatch):
-    # No goals created. Should return empty attributions.
     r = authed_client.post(
         "/progress/freeform", json={"text": "did something"}
     )
@@ -99,18 +109,22 @@ def test_progress_freeform_skips_zero_units(authed_client, monkeypatch):
         "/goals", json={"statement": "X", "pace_target_unit": "x", "pace_target_amount": 1.0}
     ).json()
     monkeypatch.setattr(
-        "buddy.api.progress.chat",
-        fake_chat_returning(
-            progress_attribution_response(
-                [
-                    {
-                        "goal_id": g["id"],
-                        "units": 0,
-                        "unit_label": "x",
-                        "confidence": 0.4,
-                        "rationale": "?",
-                    }
-                ]
+        "buddy.api.progress.chat_with_tool",
+        fake_tool_returning(
+            FakeToolResult(
+                tool_name="attribute_progress",
+                tool_input={
+                    "attributions": [
+                        {
+                            "goal_id": g["id"],
+                            "units": 0,
+                            "unit_label": "x",
+                            "confidence": 0.4,
+                            "rationale": "?",
+                        }
+                    ],
+                    "unattributed_text": "",
+                },
             )
         ),
     )

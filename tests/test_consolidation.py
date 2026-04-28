@@ -4,7 +4,20 @@ from __future__ import annotations
 
 from datetime import date
 
-from tests._helpers import consolidation_response, fake_chat_returning
+from tests._helpers import FakeToolResult, fake_tool_returning
+
+
+def _consolidation_mock(*, day_summary, auto_apply, review):
+    return fake_tool_returning(
+        FakeToolResult(
+            tool_name="propose_consolidation",
+            tool_input={
+                "day_summary": day_summary,
+                "auto_apply": auto_apply,
+                "review": review,
+            },
+        ),
+    )
 
 
 def test_no_conversations_means_no_op(authed_client, monkeypatch):
@@ -28,29 +41,27 @@ def test_consolidation_writes_day_summary_and_tiers_proposals(authed_client, mon
     store.write(log_rel, "# log\n\nuser said: I felt stuck on the runsheet.\n")
 
     monkeypatch.setattr(
-        "buddy.memory.consolidation.chat",
-        fake_chat_returning(
-            consolidation_response(
-                day_summary="Worked on the runsheet; some friction.",
-                auto_apply=[
-                    {
-                        "kind": "pattern_reinforce",
-                        "target_path": "PATTERNS.md",
-                        "summary": "Late-morning slumps on runsheet work",
-                        "content": "## task_stalls\n- runsheet stalls around 11 AM (3 of 5 days).",
-                        "rationale": "consistent across the week",
-                    }
-                ],
-                review=[
-                    {
-                        "kind": "memory_add",
-                        "target_path": "MEMORY.md",
-                        "summary": "Add: user prefers terse responses",
-                        "content": "User strongly prefers terse responses to status questions.",
-                        "rationale": "stated in 3 exchanges",
-                    }
-                ],
-            )
+        "buddy.memory.consolidation.chat_with_tool",
+        _consolidation_mock(
+            day_summary="Worked on the runsheet; some friction.",
+            auto_apply=[
+                {
+                    "kind": "pattern_reinforce",
+                    "target_path": "PATTERNS.md",
+                    "summary": "Late-morning slumps on runsheet work",
+                    "content": "## task_stalls\n- runsheet stalls around 11 AM (3 of 5 days).",
+                    "rationale": "consistent across the week",
+                }
+            ],
+            review=[
+                {
+                    "kind": "memory_add",
+                    "target_path": "MEMORY.md",
+                    "summary": "Add: user prefers terse responses",
+                    "content": "User strongly prefers terse responses to status questions.",
+                    "rationale": "stated in 3 exchanges",
+                }
+            ],
         ),
     )
 
@@ -84,9 +95,9 @@ def test_consolidation_recovers_from_invalid_json(authed_client, monkeypatch):
         "# log\n\nsome content\n",
     )
 
-    monkeypatch.setattr(
-        "buddy.memory.consolidation.chat",
-        fake_chat_returning("garbage", "still garbage"),
-    )
+    async def boom(**_):
+        raise RuntimeError("anthropic blew up")
+
+    monkeypatch.setattr("buddy.memory.consolidation.chat_with_tool", boom)
     result = asyncio.run(run_consolidation(for_date=target))
     assert result["status"] == "failed"

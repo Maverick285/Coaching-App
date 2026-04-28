@@ -12,13 +12,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from buddy.auth import require_auth
 from buddy.config import get_settings
 from buddy.db import get_session_factory
-from buddy.llm.client import chat
+from buddy.llm.client import chat, chat_with_tool
 from buddy.llm.models import ModelTier, resolve_model
 from buddy.llm.prompts.intake import (
     INTAKE_QUESTIONS,
     SYNTHESIS_PROMPT,
     build_synthesis_user_message,
 )
+from buddy.llm.tools import SYNTHESIZE_PERSONA_TOOL
 from buddy.memory.index import index_file
 from buddy.memory.store import MemoryStore
 from buddy.models import ApiUsage, IntakeSession
@@ -167,37 +168,34 @@ async def intake_finalize(req: IntakeFinalizeRequest) -> IntakeFinalizeResponse:
     user_payload = build_synthesis_user_message(transcript, settings.user_name)
     model = resolve_model(ModelTier.REASONING)
 
-    # Try the synthesis call up to 3 times. Anthropic transient errors
-    # (overloaded, network blips) and one-off JSON-parse failures are
-    # both common and both recoverable with a retry.
+    # Native tool-use call. Anthropic schema-violation rate is <0.2%, so a
+    # single attempt is normally enough; we still retry transient API
+    # errors. If the path fails completely, fall back to deterministic
+    # local synthesis so the user is never stranded mid-onboarding.
     payload: dict | None = None
     last_error: str = ""
     result = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
-            result = await chat(
+            result = await chat_with_tool(
                 model=model,
                 system=SYNTHESIS_PROMPT,
                 messages=[{"role": "user", "content": user_payload}],
+                tool=SYNTHESIZE_PERSONA_TOOL,
                 max_tokens=4096,
                 temperature=0.5 if attempt == 0 else 0.2,
             )
+            payload = result.tool_input
+            if "persona_md" in payload and "memory_md" in payload:
+                break
+            last_error = "tool input missing required keys"
+            payload = None
         except Exception as exc:
-            last_error = f"Anthropic call failed: {exc}"
-            continue
-        try:
-            payload = _parse_synthesis_json(result.text)
-            break
-        except HTTPException as http_exc:
-            last_error = f"Output not JSON (attempt {attempt + 1}): {http_exc.detail}"
+            last_error = f"tool call failed: {exc}"
             continue
 
     used_local_fallback = False
     if payload is None:
-        # Never strand the user. Build a perfectly serviceable PERSONA.md
-        # / MEMORY.md from the structured answers alone — no LLM needed.
-        # The user can re-synthesize from Customize once the LLM is
-        # cooperating again.
         payload = _render_local_synthesis(transcript, settings.user_name)
         used_local_fallback = True
 

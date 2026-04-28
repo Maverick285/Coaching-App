@@ -9,8 +9,6 @@ the goal + sub-goals + tasks + intentions in one transaction.
 
 from __future__ import annotations
 
-import json
-import re
 from datetime import date, datetime
 from typing import Any, Literal
 
@@ -20,12 +18,13 @@ from pydantic import BaseModel, Field
 from buddy.auth import require_auth
 from buddy.config import get_settings
 from buddy.db import get_session_factory
-from buddy.llm.client import chat
+from buddy.llm.client import chat_with_tool
 from buddy.llm.models import ModelTier, resolve_model
 from buddy.llm.prompts.goal_planner import (
     GOAL_PLANNER_SYSTEM,
     build_goal_planner_user_message,
 )
+from buddy.llm.tools import PROPOSE_GOAL_PLAN_TOOL
 from buddy.models import ApiUsage, Goal, ImplementationIntention, Task
 from buddy.services.profile import resolve_user_name
 
@@ -93,14 +92,6 @@ class GoalPlanApplyResponse(BaseModel):
     intention_ids: list[int]
 
 
-def _strip_fences(text: str) -> str:
-    cleaned = text.strip()
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, re.DOTALL)
-    if fence:
-        cleaned = fence.group(1)
-    return cleaned
-
-
 @router.post(
     "/goals/plan",
     response_model=GoalPlanResponse,
@@ -124,23 +115,20 @@ async def plan_goal(req: GoalPlanRequest) -> GoalPlanResponse:
     payload: dict[str, Any] | None = None
     last_error = ""
     result = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
-            result = await chat(
+            result = await chat_with_tool(
                 model=model,
                 system=GOAL_PLANNER_SYSTEM,
                 messages=[{"role": "user", "content": user_msg}],
+                tool=PROPOSE_GOAL_PLAN_TOOL,
                 max_tokens=3000,
                 temperature=0.4 if attempt == 0 else 0.2,
             )
-        except Exception as exc:
-            last_error = f"Anthropic call failed: {exc}"
-            continue
-        try:
-            payload = json.loads(_strip_fences(result.text))
+            payload = dict(result.tool_input)
             break
-        except json.JSONDecodeError as exc:
-            last_error = f"non-JSON output (attempt {attempt + 1}): {exc}"
+        except Exception as exc:
+            last_error = f"tool call failed: {exc}"
             continue
 
     if payload is None or result is None:

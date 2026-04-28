@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import re
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +9,8 @@ from sqlalchemy import select
 
 from buddy.auth import require_auth
 from buddy.db import get_session_factory
-from buddy.llm.client import chat
+from buddy.llm.client import chat_with_tool
+from buddy.llm.tools import ATTRIBUTE_PROGRESS_TOOL
 from buddy.llm.models import ModelTier, resolve_model
 from buddy.llm.prompts.planning import (
     PROGRESS_ATTRIBUTION_SYSTEM,
@@ -45,12 +44,6 @@ def _to_out(p: ProgressLog) -> ProgressLogOut:
     )
 
 
-def _strip_fences(text: str) -> str:
-    cleaned = text.strip()
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, re.DOTALL)
-    if fence:
-        cleaned = fence.group(1)
-    return cleaned
 
 
 @router.post(
@@ -114,22 +107,18 @@ async def log_progress_freeform(req: ProgressFreeForm) -> ProgressFreeFormRespon
     model = resolve_model(ModelTier.FAST)
 
     try:
-        result = await chat(
+        result = await chat_with_tool(
             model=model,
             system=PROGRESS_ATTRIBUTION_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
+            tool=ATTRIBUTE_PROGRESS_TOOL,
             max_tokens=1024,
             temperature=0.1,
         )
     except Exception as exc:
         raise HTTPException(502, f"Attribution failed: {exc}") from exc
 
-    try:
-        out = json.loads(_strip_fences(result.text))
-    except json.JSONDecodeError as exc:
-        raise HTTPException(
-            502, f"Attribution output not JSON: {result.text[:300]!r}"
-        ) from exc
+    out = result.tool_input
 
     attributions: list[AttributedProgress] = []
     for item in out.get("attributions") or []:

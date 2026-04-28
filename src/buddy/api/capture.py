@@ -7,8 +7,6 @@ each action to the appropriate Phase 0/2 endpoint.
 
 from __future__ import annotations
 
-import json
-import re
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,7 +14,8 @@ from sqlalchemy import select
 
 from buddy.auth import require_auth
 from buddy.db import get_session_factory
-from buddy.llm.client import chat
+from buddy.llm.client import chat_with_tool
+from buddy.llm.tools import CLASSIFY_CAPTURE_TOOL
 from buddy.llm.models import ModelTier, resolve_model
 from buddy.llm.prompts.capture import CAPTURE_SYSTEM, build_capture_user_message
 from buddy.models import (
@@ -38,14 +37,6 @@ from buddy.schemas_phase3 import (
 )
 
 router = APIRouter()
-
-
-def _strip_fences(text: str) -> str:
-    cleaned = text.strip()
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, re.DOTALL)
-    if fence:
-        cleaned = fence.group(1)
-    return cleaned
 
 
 @router.post(
@@ -73,22 +64,18 @@ async def capture(req: CaptureRequest) -> CaptureResponse:
     model = resolve_model(ModelTier.FAST)
 
     try:
-        result = await chat(
+        result = await chat_with_tool(
             model=model,
             system=CAPTURE_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
+            tool=CLASSIFY_CAPTURE_TOOL,
             max_tokens=1024,
             temperature=0.1,
         )
     except Exception as exc:
         raise HTTPException(502, f"Capture classification failed: {exc}") from exc
 
-    try:
-        out = json.loads(_strip_fences(result.text))
-    except json.JSONDecodeError as exc:
-        raise HTTPException(
-            502, f"Capture output not JSON: {result.text[:300]!r}"
-        ) from exc
+    out = result.tool_input
 
     actions: list[CaptureAction] = []
     for item in out.get("actions") or []:
