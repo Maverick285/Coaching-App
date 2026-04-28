@@ -106,74 +106,71 @@ fun DreamsScreen(
             return@Scaffold
         }
 
+        // True empty state — no pending, no auto-applied. Single
+        // calm explanation; no redundant "Pending review (0)" header.
+        if (state.pending.isEmpty() && state.autoApplied.isEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Nothing to review.",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Text(
+                    "Each night the system reflects on the day's conversations and proposes memory updates. Identity-affecting ones land here for you to approve.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            return@Scaffold
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item {
-                Text(
-                    if (state.pending.isEmpty()) "Nothing pending review."
-                    else "Pending review (${state.pending.size})",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-                Text(
-                    "Identity-affecting changes the system wants to make. Approve, edit, or reject.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            items(state.pending, key = { it.id }) { p ->
-                PendingDreamCard(
-                    p,
-                    onApprove = { viewModel.act(p, "approve") },
-                    onEdit = { editing = p },
-                    onReject = { rejectConfirm = p },
-                )
-            }
-
-            if (state.autoApplied.isNotEmpty()) {
+            if (state.pending.isNotEmpty()) {
                 item {
-                    Spacer(Modifier.height(12.dp))
                     Text(
-                        "Auto-applied recently",
+                        "Pending review · ${state.pending.size}",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
-                        "Lower-stakes changes the system applied without asking.",
+                        "Identity-affecting changes the system wants to make.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                items(state.pending, key = { it.id }) { p ->
+                    PendingDreamCard(
+                        p,
+                        onApprove = { viewModel.act(p, "approve") },
+                        onEdit = { editing = p },
+                        onReject = { rejectConfirm = p },
+                    )
+                }
+            }
+
+            if (state.autoApplied.isNotEmpty()) {
+                item {
+                    if (state.pending.isNotEmpty()) Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Auto-applied recently · ${state.autoApplied.size}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        "Lower-stakes updates the system applied without asking.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 items(state.autoApplied, key = { it.id }) { p ->
                     AutoAppliedRow(p)
-                }
-            }
-
-            if (state.pending.isEmpty() && state.autoApplied.isEmpty()) {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                "No proposals yet.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                "Each night the system reflects on the day's conversations and proposes memory updates. They show up here.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
                 }
             }
         }

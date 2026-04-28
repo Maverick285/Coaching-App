@@ -60,3 +60,24 @@ def test_resuming_when_at_cap_is_blocked(authed_client):
     r = authed_client.patch(f"/goals/{paused_id}", json={"state": "active"})
     assert r.status_code == 409
     assert r.json()["detail"]["code"] == "active_goal_limit"
+
+
+def test_stash_as_paused_at_the_cap_succeeds(authed_client):
+    """Master spec §49.3: 'stash this as a future goal' must work even
+    when the active-goal cap is full. Server accepts state=paused on
+    create directly, no extra round-trip needed."""
+    for i in range(4):
+        assert authed_client.post(
+            "/goals", json={"statement": f"active-{i}"}
+        ).status_code == 200
+
+    r = authed_client.post(
+        "/goals",
+        json={"statement": "future idea", "state": "paused"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["state"] == "paused"
+
+    # Cap still enforced on subsequent active creates.
+    blocked = authed_client.post("/goals", json={"statement": "5th active"})
+    assert blocked.status_code == 409

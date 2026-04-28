@@ -84,11 +84,18 @@ class TodayViewModel(holder: ApiHolder) : ViewModel() {
                 }.getOrDefault(emptyList())
                 val dreams = runCatching { a.dreams().pending.size }.getOrDefault(0)
 
+                val inEodWindow = _isEodWindow()
                 val mode = when {
                     active != null -> TodayMode.ACTIVE_SESSION
-                    grade?.finalized == false && (grade.systemScore > 0.0 || tasks.isEmpty().not()) ->
-                        // Day has scored progress but isn't finalized yet — EOD prompt could fire
-                        if (_isEodWindow()) TodayMode.EOD_PENDING else TodayMode.HAS_TASKS
+                    // EOD card only fires when (a) we're past the EOD
+                    // hour, (b) the day actually had scored progress,
+                    // (c) it isn't already finalized. Otherwise the
+                    // "End of day" framing is wrong and we should show
+                    // tasks or empty state like any other moment.
+                    inEodWindow
+                        && grade != null
+                        && !grade.finalized
+                        && grade.systemScore > 0.0 -> TodayMode.EOD_PENDING
                     tasks.isNotEmpty() -> TodayMode.HAS_TASKS
                     else -> TodayMode.EMPTY
                 }
@@ -128,11 +135,12 @@ class TodayViewModel(holder: ApiHolder) : ViewModel() {
     fun onClearError() = _state.update { it.copy(error = null) }
 
     private fun _isEodWindow(): Boolean {
-        // Treat 17:00..23:59 local as the EOD window. Real boundary
-        // detection lives on the backend (BUDDY_END_OF_DAY_*); the
-        // screen mode is just a display heuristic.
+        // Display-only heuristic. The backend's BUDDY_EOD_HOUR (default
+        // 21) is the authoritative end-of-day; we mirror its default
+        // here. Window opens at EOD-1 so the prompt is available
+        // slightly before so the user can wrap up early.
         val hour = java.time.LocalTime.now().hour
-        return hour >= 17
+        return hour >= 20
     }
 
     companion object {

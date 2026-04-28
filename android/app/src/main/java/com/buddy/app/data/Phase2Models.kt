@@ -46,6 +46,7 @@ data class GoalCreate(
     val deadline: String? = null,
     @SerialName("intervention_ceiling") val interventionCeiling: Int = 2,
     @SerialName("parent_goal_id") val parentGoalId: Int? = null,
+    val state: String = "active",  // "active" | "paused" — stash uses paused
     @SerialName("stake_webhook_url") val stakeWebhookUrl: String? = null,
     @SerialName("stake_webhook_secret") val stakeWebhookSecret: String? = null,
     @SerialName("stake_active") val stakeActive: Boolean = false,

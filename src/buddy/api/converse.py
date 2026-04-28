@@ -23,6 +23,7 @@ from buddy.db import get_session_factory
 from buddy.llm.client import chat
 from buddy.llm.models import ModelTier, resolve_model
 from buddy.llm.prompts.persona import build_persona_system_prompt, render_goals_block
+from buddy.models import FocusSession
 from buddy.llm.router import select_tier
 from buddy.memory.retrieval import assemble_context
 from buddy.memory.store import MemoryStore
@@ -92,14 +93,12 @@ async def converse(req: ConverseRequest) -> ConverseResponse:
     timezone = await resolve_timezone()
     chat_tier_pref = await resolve_chat_tier()
 
-    # Detect an active focus session — used by the boundary-detection
-    # logic to disable proactive surfacing while the user is in flow.
-    from buddy.models import FocusSession
-    from sqlalchemy import select as _select
+    # Active-focus state gates proactive surfacing — the persona stays
+    # quiet while the user is mid-flow regardless of clock-time.
     async with factory() as db:
         active_focus_row = (
             await db.execute(
-                _select(FocusSession).where(FocusSession.state == "active").limit(1)
+                select(FocusSession).where(FocusSession.state == "active").limit(1)
             )
         ).scalar_one_or_none()
     has_active_focus = active_focus_row is not None

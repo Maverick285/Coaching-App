@@ -1,12 +1,14 @@
 package com.buddy.app.ui.today
 
 import android.app.Application
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
@@ -25,12 +26,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -92,16 +91,6 @@ fun TodayScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Today") },
-                actions = {
-                    IconButton(onClick = {
-                        context.startActivity(
-                            android.content.Intent(context, CaptureActivity::class.java)
-                                .putExtra(CaptureActivity.EXTRA_SOURCE, "today_topbar")
-                        )
-                    }) {
-                        Icon(Icons.Filled.GraphicEq, contentDescription = "Capture")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -193,28 +182,30 @@ private fun StatusHeader(grade: DayGrade?, streak: StreakResponse?) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                // Grade is the largest element on the screen — par-1
+                // is what the user is checking when they open the app.
                 Text(
                     grade?.systemScore?.let { "%.1f".format(it) } ?: "—",
-                    style = MaterialTheme.typography.displaySmall,
+                    style = MaterialTheme.typography.displayLarge,
                     color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
                 )
-                Spacer(Modifier.size(8.dp))
-                Column {
-                    Text(
-                        text = paceLabel(grade?.systemScore),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "today's grade",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    text = paceLabel(grade?.systemScore),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
             }
-            Spacer(Modifier.height(6.dp))
             StreakRibbon(streak)
         }
     }
@@ -273,12 +264,12 @@ private fun NextActionCard(
                     ) { Text("Talk it through with the Coach") }
                 }
                 TodayMode.HAS_TASKS -> {
-                    Text(
-                        "Next move",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
                     if (nextTask != null) {
+                        Text(
+                            "Next move",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
                         Text(
                             nextTask.description,
                             style = MaterialTheme.typography.bodyLarge,
@@ -302,6 +293,30 @@ private fun NextActionCard(
                             onClick = onOpenFocus,
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("Start focus session") }
+                    } else {
+                        // HAS_TASKS but the first task isn't structured
+                        // enough to surface as a "next move" — render a
+                        // gentle prompt instead of an empty card.
+                        Text(
+                            "What's next?",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "Pick a task below or start a focus session against an active goal.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = onOpenGoals,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Goals") }
+                            androidx.compose.material3.Button(
+                                onClick = onOpenFocus,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Start focus") }
+                        }
                     }
                 }
                 TodayMode.EMPTY -> {
@@ -350,32 +365,69 @@ private fun StreakRibbon(streak: StreakResponse?) {
         )
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            buildString {
-                append("Streak: ${streak.currentStreakLength} unbroken")
-                if (streak.pauseDays.isNotEmpty()) append(" · ${streak.pauseDays.size} paused")
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium,
-        )
-        // Continuous chain visual: one dot per recent day. Filled dots
-        // = scored, ringed = pause, dimmed = zero. No red/yellow/green
-        // — brightness alone signals state per spec §21.2.
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            streak.history.takeLast(28).forEach { d ->
+    val pauseCount = streak.pauseDays.size
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "${streak.currentStreakLength}",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.size(6.dp))
+            Text(
+                text = if (streak.currentStreakLength == 1) "day unbroken" else "days unbroken",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (pauseCount > 0) {
+                Text(
+                    text = "  ·  $pauseCount paused",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        // Continuous ribbon, not isolated dots. A thin connecting track
+        // with rounded segments per day reads as a chain — and the
+        // ADHD-safe palette (§21.2) means brightness alone signals
+        // state. Zero days are the only true alarm; everything else
+        // sits on a primary-saturation gradient.
+        StreakRibbonStrip(history = streak.history.takeLast(28))
+    }
+}
+
+@Composable
+private fun StreakRibbonStrip(history: List<com.buddy.app.data.StreakDay>) {
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val zero = MaterialTheme.colorScheme.error
+    val pause = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    val onPace = MaterialTheme.colorScheme.primary
+    val belowPace = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(10.dp)
+            .background(track, androidx.compose.foundation.shape.RoundedCornerShape(5.dp)),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            history.forEach { d ->
                 val color = when {
-                    d.isZero -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-                    d.isPause -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                    d.score >= 1.0 -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                    d.isZero -> zero
+                    d.isPause -> pause
+                    d.score >= 1.0 -> onPace
+                    d.score > 0.0 -> belowPace
+                    else -> track
                 }
-                Surface(
-                    color = color,
-                    shape = CircleShape,
-                    modifier = Modifier.size(8.dp),
-                ) {}
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(color),
+                )
             }
         }
     }

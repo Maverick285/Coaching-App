@@ -155,7 +155,10 @@ async def _enforce_active_limit(db, parent_goal_id: int | None) -> None:
 async def create_goal(req: GoalCreate) -> GoalOut:
     factory = get_session_factory()
     async with factory() as db:
-        await _enforce_active_limit(db, req.parent_goal_id)
+        # Cap only applies to *active* top-level goals. Stashing a goal
+        # directly into the backlog (state=paused) is always allowed.
+        if req.state == "active":
+            await _enforce_active_limit(db, req.parent_goal_id)
         goal = Goal(
             statement=req.statement,
             timeframe=req.timeframe,
@@ -163,7 +166,7 @@ async def create_goal(req: GoalCreate) -> GoalOut:
             priority=req.priority,
             approach=req.approach,
             plan_source=req.plan_source,
-            state="active",
+            state=req.state,
             intervention_ceiling=req.intervention_ceiling,
             pace_target_unit=req.pace_target_unit,
             pace_target_amount=req.pace_target_amount,

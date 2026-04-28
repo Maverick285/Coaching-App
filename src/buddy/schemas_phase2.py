@@ -32,6 +32,11 @@ class GoalCreate(BaseModel):
     priority: int = Field(default=3, ge=1, le=5)
     approach: GoalApproach = "user_driven"
     plan_source: GoalPlanSource = "user_plan"
+    # Goal can be created already-paused so the wizard's "stash this in
+    # the backlog" path works when the active cap is full. Defaults to
+    # active per the historical behavior. Sub-goal callers usually leave
+    # this alone.
+    state: GoalState = "active"
     intervention_ceiling: int = Field(default=2, ge=0, le=5)
     pace_target_unit: str = ""
     pace_target_amount: float = 0.0

@@ -34,7 +34,14 @@ data class GoalsUiState(
     val activeCount: Int = 0,
     val backlogCount: Int = 0,
     val error: String? = null,
-    val limitHit: LimitHitInfo? = null,  // surfaces the 2-4 cap dialog
+    val limitHit: LimitHitInfo? = null,
+    // One-shot navigation event. The screen consumes this in a
+    // LaunchedEffect and clears it; we use it both for the simple
+    // happy-path create and for the pause-and-retry continuation
+    // (otherwise the user pauses a goal but never gets navigated to
+    // the new one).
+    val justCreatedGoalId: Int? = null,
+    val justStashed: Boolean = false,
 )
 
 data class LimitHitInfo(
@@ -94,7 +101,15 @@ class GoalsViewModel(holder: ApiHolder) : ViewModel() {
         viewModelScope.launch {
             try {
                 val g = r.createGoal(req)
-                _state.update { it.copy(goals = listOf(g) + it.goals, activeCount = it.activeCount + 1) }
+                _state.update {
+                    it.copy(
+                        goals = if (g.state == "active") listOf(g) + it.goals else it.goals,
+                        activeCount = it.activeCount + (if (g.state == "active") 1 else 0),
+                        backlogCount = it.backlogCount + (if (g.state != "active") 1 else 0),
+                        justCreatedGoalId = if (g.state == "active") g.id else null,
+                        justStashed = g.state != "active",
+                    )
+                }
                 onDone(g)
             } catch (e: retrofit2.HttpException) {
                 if (e.code() == 409) {
@@ -157,12 +172,13 @@ class GoalsViewModel(holder: ApiHolder) : ViewModel() {
         }
     }
 
-    fun applyPlan(plan: GoalPlan, onDone: (Int) -> Unit) {
+    fun applyPlan(plan: GoalPlan, onDone: (Int) -> Unit = {}) {
         val r = repo ?: return
         viewModelScope.launch {
             try {
                 val resp = r.api.applyGoalPlan(GoalPlanApplyRequest(plan = plan))
                 refresh()
+                _state.update { it.copy(justCreatedGoalId = resp.goalId) }
                 onDone(resp.goalId)
             } catch (e: retrofit2.HttpException) {
                 if (e.code() == 409) {
@@ -191,12 +207,13 @@ class GoalsViewModel(holder: ApiHolder) : ViewModel() {
             try {
                 r.updateGoal(goalIdToPause, GoalUpdate(state = "paused"))
                 _state.update { it.copy(limitHit = null) }
+                // The retry below sets justCreatedGoalId on success;
+                // the screen's LaunchedEffect navigates from there.
                 if (pending.pendingPlan != null) {
-                    applyPlan(pending.pendingPlan) { /* navigate handled at screen */ }
+                    applyPlan(pending.pendingPlan)
                 } else {
                     createGoal(pending.pendingRequest)
                 }
-                refresh()
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }
             }
@@ -208,16 +225,27 @@ class GoalsViewModel(holder: ApiHolder) : ViewModel() {
         val pending = _state.value.limitHit ?: return
         viewModelScope.launch {
             try {
-                // Save the goal in paused state — the spec calls this
-                // "stash this as a future goal".
-                val g = r.createGoal(pending.pendingRequest)
-                r.updateGoal(g.id, GoalUpdate(state = "paused"))
-                _state.update { it.copy(limitHit = null) }
+                // Server now accepts state=paused on initial create, so
+                // this is a single round-trip without tripping the cap.
+                val g = r.createGoal(pending.pendingRequest.copy(state = "paused"))
+                _state.update {
+                    it.copy(
+                        limitHit = null,
+                        backlogCount = it.backlogCount + 1,
+                        justStashed = true,
+                    )
+                }
                 refresh()
+                // Suppress unused-variable warning; g is the receipt.
+                @Suppress("UNUSED_VARIABLE") val _g = g
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }
             }
         }
+    }
+
+    fun consumeJustCreated() = _state.update {
+        it.copy(justCreatedGoalId = null, justStashed = false)
     }
 
     fun cancelLimitHit() = _state.update { it.copy(limitHit = null) }

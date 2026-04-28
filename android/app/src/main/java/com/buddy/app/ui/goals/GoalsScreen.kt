@@ -4,8 +4,8 @@ import android.app.Application
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -90,17 +90,45 @@ fun GoalsScreen(
         }
     }
 
+    // One-shot navigation: the create + plan-apply + pause-and-retry
+    // paths all funnel into justCreatedGoalId. We close any open sheet,
+    // pop to goal detail, then clear the event.
+    LaunchedEffect(state.justCreatedGoalId, state.justStashed) {
+        state.justCreatedGoalId?.let { id ->
+            path = null
+            onGoalClicked(id)
+            viewModel.consumeJustCreated()
+        }
+        if (state.justStashed) {
+            path = null
+            snackbar.showSnackbar("Stashed in backlog.")
+            viewModel.consumeJustCreated()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Goals · ${state.activeCount}/4") },
+                title = {
+                    Column {
+                        Text("Goals")
+                        // Slot count only when there's something to count.
+                        // Avoids the prescriptive "0/4" empty state.
+                        if (state.activeCount > 0) {
+                            Text(
+                                if (state.activeCount == 1) "1 active"
+                                else "${state.activeCount} active",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
                 actions = {
                     if (state.backlogCount > 0) {
                         TextButton(onClick = onOpenBacklog) {
-                            Text("Backlog (${state.backlogCount})")
+                            Text("Backlog · ${state.backlogCount}")
                         }
-                    } else {
-                        TextButton(onClick = onOpenBacklog) { Text("Backlog") }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -726,11 +754,14 @@ private fun PathCard(title: String, subtitle: String, onClick: () -> Unit) {
 }
 
 /**
- * Path A — quick track-only goal. Single statement field plus three
- * smart-defaulted chips (priority / pace amount+unit / no-zero floor).
- * No LLM round-trip. Save and move on.
+ * Path A — quick track-only goal. Goal statement is the only required
+ * field; everything else has a sensible default and is reachable from
+ * goal detail later. Spec §43.3 calls for three priority dots
+ * (low / med / high), so that's what we render. Pace + smallest-win
+ * are surfaced behind a single "Add a pace target" disclosure so the
+ * default sheet stays under-the-fold-free.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QuickGoalSheet(
     onDismiss: () -> Unit,
@@ -741,7 +772,14 @@ private fun QuickGoalSheet(
     var paceAmount by remember { mutableStateOf("") }
     var paceUnit by remember { mutableStateOf("") }
     var mvp by remember { mutableStateOf("") }
+    // Three buckets per spec: 2 = low, 3 = medium, 4 = high.
     var priority by remember { mutableStateOf(3) }
+    var showPace by remember { mutableStateOf(false) }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) {
+        // Open the sheet ready to type. ADHD-tax avoidance.
+        focusRequester.requestFocus()
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -756,69 +794,83 @@ private fun QuickGoalSheet(
                 .padding(bottom = 24.dp)
                 .imePadding()
                 .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
-                "Just track this",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "Just track this",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "One line is enough. You can refine later.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             OutlinedTextField(
                 value = statement,
                 onValueChange = { statement = it },
                 placeholder = { Text("e.g. read 24 books this year") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
             )
 
-            Text(
-                "Priority",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
-                    1 to "low",
-                    2 to "low-mid",
-                    3 to "medium",
-                    4 to "high",
-                    5 to "top",
-                ).forEach { (n, label) ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                listOf(2 to "Low", 3 to "Medium", 4 to "High").forEach { (n, label) ->
                     FilterChip(
                         selected = priority == n,
                         onClick = { priority = n },
-                        label = { Text("$n · $label") },
+                        label = { Text(label) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
 
-            Text(
-                "Pace (optional)",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = paceAmount,
-                    onValueChange = { paceAmount = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                    label = { Text("Amount") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                OutlinedTextField(
-                    value = paceUnit,
-                    onValueChange = { paceUnit = it },
-                    label = { Text("Unit") },
-                    placeholder = { Text("pages, minutes…") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
+            if (!showPace) {
+                androidx.compose.material3.TextButton(onClick = { showPace = true }) {
+                    Text("Add a pace target  +")
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Pace target",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = paceAmount,
+                            onValueChange = {
+                                paceAmount = it.filter { ch -> ch.isDigit() || ch == '.' }
+                            },
+                            label = { Text("Per day") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = paceUnit,
+                            onValueChange = { paceUnit = it },
+                            label = { Text("Unit") },
+                            placeholder = { Text("pages…") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    OutlinedTextField(
+                        value = mvp,
+                        onValueChange = { mvp = it },
+                        label = { Text("Smallest win that still counts") },
+                        placeholder = { Text("e.g. 5 pages, 10-min walk") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
-            OutlinedTextField(
-                value = mvp,
-                onValueChange = { mvp = it },
-                label = { Text("Smallest win that still counts (optional)") },
-                modifier = Modifier.fillMaxWidth(),
-            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.OutlinedButton(
