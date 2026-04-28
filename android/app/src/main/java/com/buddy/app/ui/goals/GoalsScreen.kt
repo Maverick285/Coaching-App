@@ -445,8 +445,14 @@ private fun NewGoalWizard(
     }
 
     if (showDeadlinePicker) {
+        // Material3's DatePicker stores the selected day as UTC
+        // midnight. Round-tripping through systemDefault() pushes the
+        // value backwards by your timezone offset (so a CST user
+        // picking Apr 28 reads back as Apr 27). Use UTC on both sides
+        // and the date the user tapped is the date you get.
         val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = deadline?.atStartOfDay(java.time.ZoneId.systemDefault())
+            initialSelectedDateMillis = deadline
+                ?.atStartOfDay(java.time.ZoneOffset.UTC)
                 ?.toInstant()?.toEpochMilli()
         )
         DatePickerDialog(
@@ -455,7 +461,7 @@ private fun NewGoalWizard(
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { ms ->
                         deadline = java.time.Instant.ofEpochMilli(ms)
-                            .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                            .atZone(java.time.ZoneOffset.UTC).toLocalDate()
                     }
                     showDeadlinePicker = false
                 }) { Text("OK") }

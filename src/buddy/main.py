@@ -46,6 +46,13 @@ async def lifespan(app: FastAPI):
     # Bootstrap the memory directory + git repo + seed files.
     MemoryStore()
 
+    # Bring the database schema up to head before anything queries it.
+    # This is what most production deploys forget; the symptom is
+    # mysterious 500s on routes whose ORM models reference columns the
+    # DB doesn't have yet. Running on every boot is safe — alembic is
+    # idempotent and noops when already current.
+    await _ensure_schema_current()
+
     # Bring the search index in sync with the markdown files.
     await reconcile_index()
 
@@ -59,6 +66,54 @@ async def lifespan(app: FastAPI):
         log.info("shutdown.begin")
         shutdown_scheduler()
         log.info("shutdown.complete")
+
+
+async def _ensure_schema_current() -> None:
+    """Run `alembic upgrade head` programmatically, in-process, before
+    the app starts serving traffic. We do it via subprocess (rather than
+    invoking alembic.command directly) because alembic's command API
+    sets up its own logging and config which fights with structlog and
+    occasionally hangs on async event loops.
+    """
+    import asyncio
+    import shutil
+    from pathlib import Path
+
+    # Where alembic.ini lives. Repo-root in dev, /app in the docker image.
+    repo_root = Path(__file__).resolve().parents[2]
+    ini = repo_root / "alembic.ini"
+    if not ini.exists():
+        log.warn("startup.alembic_ini_missing", path=str(ini))
+        return
+
+    if shutil.which("alembic") is None:
+        log.warn("startup.alembic_binary_missing")
+        return
+
+    proc = await asyncio.create_subprocess_exec(
+        "alembic",
+        "-c",
+        str(ini),
+        "upgrade",
+        "head",
+        cwd=str(repo_root),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        log.error(
+            "startup.alembic_upgrade_failed",
+            code=proc.returncode,
+            stdout=stdout.decode(errors="ignore")[-2000:],
+            stderr=stderr.decode(errors="ignore")[-2000:],
+        )
+        # Fail loud rather than serve a half-broken DB.
+        raise RuntimeError(
+            f"alembic upgrade head failed (rc={proc.returncode}); "
+            f"stderr: {stderr.decode(errors='ignore')[-500:]}"
+        )
+    log.info("startup.alembic_upgrade_ok")
 
 
 def create_app() -> FastAPI:

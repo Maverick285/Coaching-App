@@ -136,9 +136,12 @@ async def chat_with_tool(
             break
 
     if tool_input is None:
+        # Include the model's prose so we can see *why* it refused —
+        # usually a content-policy or ambiguity ("I need more info").
         raise ValueError(
-            f"Model did not call tool {tool_name!r}; got blocks "
-            f"{[getattr(b, 'type', None) for b in resp.content]}"
+            f"Model did not call tool {tool_name!r}. "
+            f"Blocks: {[getattr(b, 'type', None) for b in resp.content]}. "
+            f"Prose: {text[:500]!r}"
         )
     if found_name and found_name != tool_name:
         raise ValueError(

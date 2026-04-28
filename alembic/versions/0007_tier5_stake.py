@@ -39,7 +39,10 @@ def upgrade() -> None:
     op.create_table(
         "stake_events",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("goal_id", sa.Integer(), nullable=False, index=True),
+        # No index= here — we create the named index explicitly below
+        # so its name is stable across SQLAlchemy versions and matches
+        # what the downgrade tries to drop.
+        sa.Column("goal_id", sa.Integer(), nullable=False),
         sa.Column("event_kind", sa.String(length=64), nullable=False),
         sa.Column("payload", sa.JSON(), nullable=False),
         sa.Column("response_status", sa.Integer(), nullable=True),
