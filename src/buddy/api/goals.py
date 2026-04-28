@@ -63,6 +63,9 @@ def _goal_to_out(g: Goal) -> GoalOut:
             "mvp_threshold": g.mvp_threshold,
             "parent_goal_id": g.parent_goal_id,
             "reflection_log": g.reflection_log,
+            "stake_webhook_url": g.stake_webhook_url,
+            "stake_webhook_secret": g.stake_webhook_secret,
+            "stake_active": g.stake_active,
             "created_at": g.created_at,
             "updated_at": g.updated_at,
         }
@@ -117,10 +120,42 @@ async def list_goals(state: str | None = None) -> GoalsListResponse:
     return GoalsListResponse(goals=[_goal_to_out(g) for g in rows])
 
 
+ACTIVE_GOAL_LIMIT = 4  # spec §20.1
+
+
+async def _enforce_active_limit(db, parent_goal_id: int | None) -> None:
+    """Per master spec §20.1, the user keeps 2-4 active goals at the
+    top level. Sub-goals (those with a parent) don't count toward the
+    cap; they're internal structure. Returns None on success, raises
+    HTTPException 409 with a code the client can switch on otherwise.
+    """
+    if parent_goal_id is not None:
+        return
+    count = (
+        await db.execute(
+            select(Goal).where(Goal.state == "active", Goal.parent_goal_id.is_(None))
+        )
+    ).scalars().all()
+    if len(count) >= ACTIVE_GOAL_LIMIT:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "active_goal_limit",
+                "message": (
+                    f"You already have {len(count)} active top-level "
+                    f"goals. Pause one to add another, or save this as a "
+                    f"backlog item."
+                ),
+                "limit": ACTIVE_GOAL_LIMIT,
+            },
+        )
+
+
 @router.post("/goals", response_model=GoalOut, dependencies=[Depends(require_auth)])
 async def create_goal(req: GoalCreate) -> GoalOut:
     factory = get_session_factory()
     async with factory() as db:
+        await _enforce_active_limit(db, req.parent_goal_id)
         goal = Goal(
             statement=req.statement,
             timeframe=req.timeframe,
@@ -135,6 +170,9 @@ async def create_goal(req: GoalCreate) -> GoalOut:
             pace_target_description=req.pace_target_description,
             mvp_threshold=req.mvp_threshold,
             parent_goal_id=req.parent_goal_id,
+            stake_webhook_url=req.stake_webhook_url,
+            stake_webhook_secret=req.stake_webhook_secret,
+            stake_active=req.stake_active,
         )
         db.add(goal)
         await db.commit()
@@ -181,11 +219,21 @@ async def get_goal(goal_id: int) -> GoalDetail:
 @router.patch("/goals/{goal_id}", response_model=GoalOut, dependencies=[Depends(require_auth)])
 async def update_goal(goal_id: int, req: GoalUpdate) -> GoalOut:
     factory = get_session_factory()
+    updates = req.model_dump(exclude_unset=True)
     async with factory() as db:
         goal = await db.get(Goal, goal_id)
         if goal is None:
             raise HTTPException(404, "Goal not found.")
-        for field, value in req.model_dump(exclude_unset=True).items():
+        # If we're flipping a top-level goal back to "active", make sure
+        # the cap still holds. Pausing/abandoning is always fine.
+        new_state = updates.get("state")
+        if (
+            new_state == "active"
+            and goal.state != "active"
+            and goal.parent_goal_id is None
+        ):
+            await _enforce_active_limit(db, parent_goal_id=None)
+        for field, value in updates.items():
             setattr(goal, field, value)
         goal.updated_at = datetime.utcnow()
         await db.commit()

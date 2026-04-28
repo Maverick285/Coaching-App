@@ -72,13 +72,16 @@ import java.time.ZoneId
 @Composable
 fun GoalsScreen(
     onGoalClicked: (Int) -> Unit,
+    onTalkItThrough: () -> Unit = {},
+    onOpenBacklog: () -> Unit = {},
     viewModel: GoalsViewModel = viewModel(
         factory = GoalsViewModel.factory(LocalContext.current.applicationContext as Application)
     ),
 ) {
     val state by viewModel.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
-    var showAdd by remember { mutableStateOf(false) }
+    var showChooser by remember { mutableStateOf(false) }
+    var path by remember { mutableStateOf<NewGoalPath?>(null) }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -90,7 +93,16 @@ fun GoalsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Goals") },
+                title = { Text("Goals · ${state.activeCount}/4") },
+                actions = {
+                    if (state.backlogCount > 0) {
+                        TextButton(onClick = onOpenBacklog) {
+                            Text("Backlog (${state.backlogCount})")
+                        }
+                    } else {
+                        TextButton(onClick = onOpenBacklog) { Text("Backlog") }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -98,7 +110,7 @@ fun GoalsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
+            FloatingActionButton(onClick = { showChooser = true }) {
                 Icon(Icons.Filled.Add, contentDescription = "Add goal")
             }
         },
@@ -142,20 +154,115 @@ fun GoalsScreen(
         }
     }
 
-    if (showAdd) {
-        NewGoalWizard(
-            onDismiss = { showAdd = false },
+    if (showChooser) {
+        NewGoalPathChooserSheet(
+            onDismiss = { showChooser = false },
+            onChoose = { chosen ->
+                showChooser = false
+                if (chosen == NewGoalPath.TALK) {
+                    onTalkItThrough()
+                } else {
+                    path = chosen
+                }
+            },
+        )
+    }
+
+    state.limitHit?.let { hit ->
+        ActiveGoalLimitDialog(
+            message = hit.message,
+            activeGoals = state.goals,
+            onPickToPause = { id ->
+                path = null
+                viewModel.pauseGoalAndRetry(id)
+            },
+            onStashAsBacklog = {
+                path = null
+                viewModel.stashAsBacklog()
+            },
+            onDismiss = { viewModel.cancelLimitHit() },
+        )
+    }
+
+    when (path) {
+        NewGoalPath.QUICK -> QuickGoalSheet(
+            onDismiss = { path = null },
+            onCreate = { req ->
+                viewModel.createGoal(req) { goal ->
+                    path = null
+                    onGoalClicked(goal.id)
+                }
+            },
+        )
+        NewGoalPath.PLAN -> NewGoalWizard(
+            onDismiss = { path = null },
             onPlan = { wish, deadline, cb, errCb ->
                 viewModel.planGoal(wish, deadline, cb, errCb)
             },
             onAccept = { plan ->
                 viewModel.applyPlan(plan) { goalId ->
-                    showAdd = false
+                    path = null
                     onGoalClicked(goalId)
                 }
             },
         )
+        NewGoalPath.TALK, null -> Unit
     }
+}
+
+internal enum class NewGoalPath { QUICK, PLAN, TALK }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActiveGoalLimitDialog(
+    message: String,
+    activeGoals: List<Goal>,
+    onPickToPause: (Int) -> Unit,
+    onStashAsBacklog: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Active goal limit") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(message, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Pick one to pause and free a slot, or stash this idea in the backlog.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                activeGoals.forEach { g ->
+                    Card(
+                        onClick = { onPickToPause(g.id) },
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                "Pause: ${g.statement}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                "Priority ${g.priority}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onStashAsBacklog) { Text("Stash in backlog") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
@@ -536,6 +643,206 @@ private fun PlanReview(
             onClick = onAccept,
             modifier = Modifier.weight(1f),
         ) { Text("Save plan") }
+    }
+}
+
+/**
+ * Three-path chooser per spec §43.2:
+ *   QUICK  — "I have a plan, just track this for me." 30-60s.
+ *   PLAN   — "Help me plan this." WOOP via the AI planner.
+ *   TALK   — "I'm not sure yet, help me figure it out." Opens chat.
+ *
+ * Default path is QUICK because most goals don't need the full WOOP
+ * machinery. The chooser surfaces all three with equal weight so the
+ * user picks based on what they actually need that day.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NewGoalPathChooserSheet(
+    onDismiss: () -> Unit,
+    onChoose: (NewGoalPath) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "New goal",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "How much help do you want with this one?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            PathCard(
+                title = "Just track this",
+                subtitle = "I know what I want. Save it and get out of my way.",
+                onClick = { onChoose(NewGoalPath.QUICK) },
+            )
+            PathCard(
+                title = "Help me plan it",
+                subtitle = "Build out pace, milestones, and if-then plans with me.",
+                onClick = { onChoose(NewGoalPath.PLAN) },
+            )
+            PathCard(
+                title = "Not sure yet — let's talk",
+                subtitle = "Open the Coach chat and think it through.",
+                onClick = { onChoose(NewGoalPath.TALK) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PathCard(title: String, subtitle: String, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * Path A — quick track-only goal. Single statement field plus three
+ * smart-defaulted chips (priority / pace amount+unit / no-zero floor).
+ * No LLM round-trip. Save and move on.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun QuickGoalSheet(
+    onDismiss: () -> Unit,
+    onCreate: (com.buddy.app.data.GoalCreate) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var statement by remember { mutableStateOf("") }
+    var paceAmount by remember { mutableStateOf("") }
+    var paceUnit by remember { mutableStateOf("") }
+    var mvp by remember { mutableStateOf("") }
+    var priority by remember { mutableStateOf(3) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .imePadding()
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "Just track this",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            OutlinedTextField(
+                value = statement,
+                onValueChange = { statement = it },
+                placeholder = { Text("e.g. read 24 books this year") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Text(
+                "Priority",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    1 to "low",
+                    2 to "low-mid",
+                    3 to "medium",
+                    4 to "high",
+                    5 to "top",
+                ).forEach { (n, label) ->
+                    FilterChip(
+                        selected = priority == n,
+                        onClick = { priority = n },
+                        label = { Text("$n · $label") },
+                    )
+                }
+            }
+
+            Text(
+                "Pace (optional)",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = paceAmount,
+                    onValueChange = { paceAmount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    label = { Text("Amount") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = paceUnit,
+                    onValueChange = { paceUnit = it },
+                    label = { Text("Unit") },
+                    placeholder = { Text("pages, minutes…") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            OutlinedTextField(
+                value = mvp,
+                onValueChange = { mvp = it },
+                label = { Text("Smallest win that still counts (optional)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Cancel") }
+                androidx.compose.material3.Button(
+                    onClick = {
+                        if (statement.isBlank()) return@Button
+                        onCreate(
+                            com.buddy.app.data.GoalCreate(
+                                statement = statement.trim(),
+                                priority = priority,
+                                paceTargetAmount = paceAmount.toDoubleOrNull() ?: 0.0,
+                                paceTargetUnit = paceUnit.trim(),
+                                mvpThreshold = mvp.trim(),
+                            )
+                        )
+                    },
+                    enabled = statement.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) { Text("Save goal") }
+            }
+        }
     }
 }
 

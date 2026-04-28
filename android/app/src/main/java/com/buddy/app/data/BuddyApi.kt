@@ -190,6 +190,12 @@ interface BuddyApi {
         @Body req: MemoryFileWrite,
     ): MemoryFileContent
 
+    @GET("/memory/dreams")
+    suspend fun dreams(): DreamsResponse
+
+    @POST("/memory/dreams")
+    suspend fun dreamAction(@Body req: DreamAction): DreamActionResponse
+
     @GET("/distraction-rules")
     suspend fun distractionRules(@Query("goal_id") goalId: Int): DistractionRulesListResponse
 

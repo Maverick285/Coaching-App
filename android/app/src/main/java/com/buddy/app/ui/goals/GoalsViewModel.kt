@@ -30,8 +30,17 @@ import kotlinx.coroutines.launch
 data class GoalsUiState(
     val configured: Boolean = false,
     val loading: Boolean = false,
-    val goals: List<Goal> = emptyList(),
+    val goals: List<Goal> = emptyList(),  // active only by default
+    val activeCount: Int = 0,
+    val backlogCount: Int = 0,
     val error: String? = null,
+    val limitHit: LimitHitInfo? = null,  // surfaces the 2-4 cap dialog
+)
+
+data class LimitHitInfo(
+    val message: String,
+    val pendingRequest: GoalCreate,
+    val pendingPlan: GoalPlan? = null,  // present if it was a plan-apply
 )
 
 class GoalsViewModel(holder: ApiHolder) : ViewModel() {
@@ -56,8 +65,20 @@ class GoalsViewModel(holder: ApiHolder) : ViewModel() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
             try {
-                val data = r.listGoals()
-                _state.update { it.copy(loading = false, goals = data.goals) }
+                val active = r.listGoals(state = "active").goals
+                    .filter { it.parentGoalId == null }
+                val all = r.listGoals().goals
+                val backlogCount = all.count { g ->
+                    g.parentGoalId == null && g.state in setOf("paused", "completed", "abandoned")
+                }
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        goals = active,
+                        activeCount = active.size,
+                        backlogCount = backlogCount,
+                    )
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message) }
             }
@@ -73,8 +94,21 @@ class GoalsViewModel(holder: ApiHolder) : ViewModel() {
         viewModelScope.launch {
             try {
                 val g = r.createGoal(req)
-                _state.update { it.copy(goals = listOf(g) + it.goals) }
+                _state.update { it.copy(goals = listOf(g) + it.goals, activeCount = it.activeCount + 1) }
                 onDone(g)
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 409) {
+                    _state.update {
+                        it.copy(
+                            limitHit = LimitHitInfo(
+                                message = parseLimitMessage(e),
+                                pendingRequest = req,
+                            )
+                        )
+                    }
+                } else {
+                    _state.update { it.copy(error = e.message) }
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }
             }
@@ -130,10 +164,76 @@ class GoalsViewModel(holder: ApiHolder) : ViewModel() {
                 val resp = r.api.applyGoalPlan(GoalPlanApplyRequest(plan = plan))
                 refresh()
                 onDone(resp.goalId)
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 409) {
+                    _state.update {
+                        it.copy(
+                            limitHit = LimitHitInfo(
+                                message = parseLimitMessage(e),
+                                pendingRequest = GoalCreate(statement = plan.statement),
+                                pendingPlan = plan,
+                            )
+                        )
+                    }
+                } else {
+                    _state.update { it.copy(error = e.message) }
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }
             }
         }
+    }
+
+    fun pauseGoalAndRetry(goalIdToPause: Int) {
+        val r = repo ?: return
+        val pending = _state.value.limitHit ?: return
+        viewModelScope.launch {
+            try {
+                r.updateGoal(goalIdToPause, GoalUpdate(state = "paused"))
+                _state.update { it.copy(limitHit = null) }
+                if (pending.pendingPlan != null) {
+                    applyPlan(pending.pendingPlan) { /* navigate handled at screen */ }
+                } else {
+                    createGoal(pending.pendingRequest)
+                }
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    fun stashAsBacklog() {
+        val r = repo ?: return
+        val pending = _state.value.limitHit ?: return
+        viewModelScope.launch {
+            try {
+                // Save the goal in paused state — the spec calls this
+                // "stash this as a future goal".
+                val g = r.createGoal(pending.pendingRequest)
+                r.updateGoal(g.id, GoalUpdate(state = "paused"))
+                _state.update { it.copy(limitHit = null) }
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    fun cancelLimitHit() = _state.update { it.copy(limitHit = null) }
+
+    private fun parseLimitMessage(e: retrofit2.HttpException): String {
+        return runCatching {
+            val body = e.response()?.errorBody()?.string().orEmpty()
+            // Server returns: {"error":"http_error","detail":{"message": "..."}}
+            kotlinx.serialization.json.Json
+                .parseToJsonElement(body)
+                .let { it as? kotlinx.serialization.json.JsonObject }
+                ?.get("detail")
+                ?.let { it as? kotlinx.serialization.json.JsonObject }
+                ?.get("message")
+                ?.toString()?.trim('"')
+        }.getOrNull() ?: "You have 4 active goals already."
     }
 
     companion object {

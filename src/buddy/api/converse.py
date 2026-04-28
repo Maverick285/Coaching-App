@@ -91,12 +91,27 @@ async def converse(req: ConverseRequest) -> ConverseResponse:
     persona_name = await resolve_persona_name()
     timezone = await resolve_timezone()
     chat_tier_pref = await resolve_chat_tier()
+
+    # Detect an active focus session — used by the boundary-detection
+    # logic to disable proactive surfacing while the user is in flow.
+    from buddy.models import FocusSession
+    from sqlalchemy import select as _select
+    async with factory() as db:
+        active_focus_row = (
+            await db.execute(
+                _select(FocusSession).where(FocusSession.state == "active").limit(1)
+            )
+        ).scalar_one_or_none()
+    has_active_focus = active_focus_row is not None
+
     system_prompt = build_persona_system_prompt(
         retrieved=ctx,
         user_name=user_name,
         persona_name=persona_name,
         timezone=timezone,
         goals_block=goals_block,
+        boundary_context=req.boundary_context,
+        active_focus=has_active_focus,
     )
 
     # 4. Route + call. The user's chat_tier preference pins the tier unless

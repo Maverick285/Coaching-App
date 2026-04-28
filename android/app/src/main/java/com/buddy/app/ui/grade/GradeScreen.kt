@@ -227,11 +227,13 @@ private fun FinalizeRow(
 
 @Composable
 private fun ScorePill(score: Double, isZero: Boolean) {
+    // Per spec §21.2: alarm color only for the true zero-day floor.
+    // Sub-pace days are dimmed primary, not alarmed.
     val bg = when {
         isZero -> MaterialTheme.colorScheme.error
         score >= 1.0 -> MaterialTheme.colorScheme.primary
-        score > 0.0 -> MaterialTheme.colorScheme.surfaceVariant
-        else -> MaterialTheme.colorScheme.error
+        score > 0.0 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+        else -> MaterialTheme.colorScheme.surfaceVariant
     }
     Box(
         modifier = Modifier
@@ -301,10 +303,14 @@ private fun StreakCard(streak: StreakResponse) {
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 streak.history.takeLast(28).forEach { d ->
+                    // ADHD-safe palette per spec §21.2: brightness alone
+                    // signals state. Zero days are the only true alarm
+                    // (the sacred floor); other states are gradient.
                     val color = when {
-                        d.isPause -> Color.Gray.copy(alpha = 0.4f)
                         d.isZero -> MaterialTheme.colorScheme.error
+                        d.isPause -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         d.score >= 1.0 -> MaterialTheme.colorScheme.primary
+                        d.score > 0.0 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
                         else -> MaterialTheme.colorScheme.surfaceVariant
                     }
                     Box(

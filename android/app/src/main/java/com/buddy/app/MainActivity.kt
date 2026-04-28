@@ -54,7 +54,8 @@ private fun BuddyApp(deeplink: String?) {
                 deeplink == "journal" -> Routes.JOURNAL
                 deeplink == "chat" -> Routes.CHAT
                 deeplink == "tasks" -> Routes.TASKS
-                else -> Routes.TASKS
+                deeplink == "dreams" -> Routes.DREAMS
+                else -> Routes.TODAY
             }
         }
 

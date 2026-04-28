@@ -171,10 +171,33 @@ class Goal(Base):
     mvp_threshold: Mapped[str] = mapped_column(Text, default="", nullable=False)
     parent_goal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     reflection_log: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Tier 5 stake-at-risk (master spec §13.1). Opt-in per goal. The
+    # webhook fires when the no-zero-day floor is broken on this goal,
+    # delegating the actual stake-handling to an external service like
+    # Beeminder.
+    stake_webhook_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    stake_webhook_secret: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    stake_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class StakeEvent(Base):
+    """Audit trail for tier-5 webhook fires."""
+
+    __tablename__ = "stake_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    event_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    response_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_body: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    fired_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
 

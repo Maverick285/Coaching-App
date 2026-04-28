@@ -236,6 +236,40 @@ data class DistractionRule(
 @Serializable
 data class DistractionRulesListResponse(val rules: List<DistractionRule>)
 
+// --- Dreams (memory proposals) ------------------------------------------
+
+@Serializable
+data class DreamProposal(
+    val id: String,
+    @SerialName("proposal_kind") val proposalKind: String,
+    @SerialName("target_path") val targetPath: String,
+    val summary: String,
+    @SerialName("proposed_content") val proposedContent: String,
+    val rationale: String,
+    val status: String,
+    @SerialName("created_at") val createdAt: String,
+)
+
+@Serializable
+data class DreamsResponse(
+    val pending: List<DreamProposal> = emptyList(),
+    @SerialName("auto_applied_recent") val autoAppliedRecent: List<DreamProposal> = emptyList(),
+)
+
+@Serializable
+data class DreamAction(
+    val action: String,  // approve | reject | edit
+    @SerialName("proposal_id") val proposalId: String,
+    @SerialName("edited_content") val editedContent: String? = null,
+)
+
+@Serializable
+data class DreamActionResponse(
+    @SerialName("proposal_id") val proposalId: String,
+    @SerialName("new_status") val newStatus: String,
+    @SerialName("applied_path") val appliedPath: String? = null,
+)
+
 // --- Admin: factory reset ------------------------------------------------
 
 @Serializable

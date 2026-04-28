@@ -71,6 +71,12 @@ class ConverseRequest(BaseModel):
     session_id: str | None = None
     message: str = Field(min_length=1)
     force_reasoning_tier: bool = False
+    # Optional client-supplied workflow boundary tag. When None, the
+    # backend derives it from the daily-rhythm clock + active-session
+    # state. Allowed labels (informational): morning_check_in,
+    # end_of_day, weekly_review_window, post_focus, post_failure,
+    # mid_task, mid_focus_session.
+    boundary_context: str | None = None
 
 
 class MemoryLoadedItem(BaseModel):

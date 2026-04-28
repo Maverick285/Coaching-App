@@ -352,14 +352,19 @@ async def run_engine_tick(session: AsyncSession) -> TickResult:
 
 async def run_floor_check(session: AsyncSession, day: date | None = None) -> list[Intervention]:
     """Daily floor check: for each active goal, if no progress today,
-    fire a Tier 0 floor intervention."""
+    fire a Tier 0 floor intervention. Goals opted into Tier 5
+    stake-at-risk additionally trigger their pre-committed webhook so
+    Beeminder/IFTTT/Zapier can act on the no-zero-day break.
+    """
     from buddy.models import ProgressLog
+    from buddy.services.stakes import fire_stake_webhook
 
     today = day or date.today()
     start = datetime(today.year, today.month, today.day)
     end = start + timedelta(days=1)
 
     fired: list[Intervention] = []
+    stake_fires: list[int] = []
     goals = (
         await session.execute(select(Goal).where(Goal.state == "active"))
     ).scalars().all()
@@ -384,5 +389,17 @@ async def run_floor_check(session: AsyncSession, day: date | None = None) -> lis
         )
         if result is not None:
             fired.append(result)
+        # Tier 5: opt-in stake webhook fires alongside the floor
+        # intervention, regardless of intervention_ceiling. The stake is
+        # the user's pre-commitment, not an escalation rung.
+        if goal.stake_active and goal.stake_webhook_url:
+            stake_fires.append(goal.id)
     await session.commit()
+
+    for goal_id in stake_fires:
+        await fire_stake_webhook(
+            goal_id=goal_id,
+            event_kind="zero_day_floor_break",
+            payload={"day": today.isoformat()},
+        )
     return fired

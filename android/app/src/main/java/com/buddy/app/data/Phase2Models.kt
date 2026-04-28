@@ -22,6 +22,9 @@ data class Goal(
     @SerialName("mvp_threshold") val mvpThreshold: String,
     @SerialName("parent_goal_id") val parentGoalId: Int? = null,
     @SerialName("reflection_log") val reflectionLog: String,
+    @SerialName("stake_webhook_url") val stakeWebhookUrl: String? = null,
+    @SerialName("stake_webhook_secret") val stakeWebhookSecret: String? = null,
+    @SerialName("stake_active") val stakeActive: Boolean = false,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
 )
@@ -42,6 +45,10 @@ data class GoalCreate(
     val timeframe: String = "open_ended",
     val deadline: String? = null,
     @SerialName("intervention_ceiling") val interventionCeiling: Int = 2,
+    @SerialName("parent_goal_id") val parentGoalId: Int? = null,
+    @SerialName("stake_webhook_url") val stakeWebhookUrl: String? = null,
+    @SerialName("stake_webhook_secret") val stakeWebhookSecret: String? = null,
+    @SerialName("stake_active") val stakeActive: Boolean = false,
 )
 
 @Serializable

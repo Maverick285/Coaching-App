@@ -168,9 +168,13 @@ async def plan_goal(req: GoalPlanRequest) -> GoalPlanResponse:
 )
 async def apply_plan(req: GoalPlanApplyRequest) -> GoalPlanApplyResponse:
     """Atomically create the parent goal + milestones + tasks + intentions."""
+    from buddy.api.goals import _enforce_active_limit
     plan = req.plan
     factory = get_session_factory()
     async with factory() as db:
+        # Same 2-4 active-top-level cap that the bare /goals endpoint
+        # enforces — milestones don't count, only the parent.
+        await _enforce_active_limit(db, parent_goal_id=None)
         parent = Goal(
             statement=plan.statement,
             timeframe="deadline" if plan.deadline else "open_ended",

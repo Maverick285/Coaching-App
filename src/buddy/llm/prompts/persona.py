@@ -46,17 +46,25 @@ You operate on a directive-nondirective continuum:
 
 # Proactive surfacing rules
 
-You may surface observations or concerns when:
+PROACTIVE_SURFACING: {proactive_state}
+BOUNDARY_CONTEXT: {boundary_context}
 
-- The user is at a workflow boundary (morning check-in, end-of-day debrief, weekly review, post-focus-session, post-failure acknowledgment).
-- Your confidence in the observation is appropriate to your pushback-tendency setting.
-- The observation is framed as observation, not correction — let the user reach the conclusion when possible.
+When PROACTIVE_SURFACING is ENABLED, you may surface observations or
+concerns. When DISABLED, do not — answer only what the user asked,
+acknowledge what they said, and stop. Don't volunteer patterns, lifestyle
+flags, or coaching observations on this turn.
+
+When ENABLED:
+- Frame as observation, not correction. Let the user reach the conclusion.
+- Confidence threshold scales with the persona's pushback-tendency setting.
+- Stay inside the user's stated lifestyle-engagement preferences from PERSONA.md.
 
 You do not surface observations:
-
-- Mid-task, mid-focus-session, or when the user just opened the app to capture something quickly.
+- Mid-task, mid-focus-session, or when the user just opened the app to
+  capture something quickly. (PROACTIVE_SURFACING will be DISABLED in
+  these moments.)
 - When pushback tendency is "compliant" and confidence is below 0.85.
-- When the topic is outside the user's stated lifestyle-engagement preferences from PERSONA.md.
+- When the topic is outside the user's stated lifestyle preferences.
 
 # Operational
 
@@ -118,6 +126,44 @@ def render_goals_block(
     return "\n".join(lines)
 
 
+def is_boundary_now(
+    *,
+    boundary_context: str | None,
+    now: datetime,
+    morning_hour: int,
+    end_of_day_hour: int,
+    active_focus: bool,
+) -> tuple[bool, str]:
+    """Decide whether the current moment counts as a workflow boundary.
+
+    Master spec §5.11 + §53: proactive surfacing only at boundaries —
+    morning, end-of-day, weekly review, post-focus, post-failure. The
+    cost of getting this wrong is high: high-AI-knowledge users
+    perceive mid-task interruptions as competence-challenging.
+
+    Returns (is_boundary, label). The label is what the persona prompt
+    sees as the BOUNDARY_CONTEXT line so the model knows *which* kind
+    of boundary moment it's in.
+    """
+    if boundary_context:
+        # Explicit override from the client wins (e.g. Today screen
+        # invoking the chat from an EOD card).
+        return (boundary_context != "mid_task", boundary_context)
+
+    if active_focus:
+        return (False, "mid_focus_session")
+
+    hour = now.hour
+    weekday = now.weekday()  # 0 = Monday
+    if hour in {morning_hour, (morning_hour + 1) % 24}:
+        return (True, "morning_check_in")
+    if hour in {end_of_day_hour, (end_of_day_hour - 1) % 24}:
+        return (True, "end_of_day")
+    if weekday == 6 and 17 <= hour <= 22:  # Sunday evening
+        return (True, "weekly_review_window")
+    return (False, "mid_task")
+
+
 def build_persona_system_prompt(
     *,
     retrieved: AssembledContext,
@@ -125,6 +171,8 @@ def build_persona_system_prompt(
     persona_name: str | None = None,
     timezone: str | None = None,
     goals_block: str | None = None,
+    boundary_context: str | None = None,
+    active_focus: bool = False,
 ) -> str:
     settings = get_settings()
     store = MemoryStore()
@@ -139,6 +187,14 @@ def build_persona_system_prompt(
         tz = ZoneInfo("UTC")
     now = datetime.now(tz=tz)
 
+    is_boundary, boundary_label = is_boundary_now(
+        boundary_context=boundary_context,
+        now=now,
+        morning_hour=settings.morning_check_in_hour,
+        end_of_day_hour=settings.end_of_day_hour,
+        active_focus=active_focus,
+    )
+
     return PROMPT_TEMPLATE.format(
         persona_name=persona_name or settings.persona_name,
         user_name=user_name or settings.user_name,
@@ -146,6 +202,8 @@ def build_persona_system_prompt(
         memory_md=memory_md.strip(),
         goals_block=(goals_block or "_(active goals not loaded)_").strip(),
         retrieved_context=retrieved.render() or "_(no relevant memory retrieved)_",
+        proactive_state="ENABLED" if is_boundary else "DISABLED",
+        boundary_context=boundary_label,
         now=now.strftime("%Y-%m-%d %H:%M"),
         timezone=tz_name,
         weekday=now.strftime("%A"),

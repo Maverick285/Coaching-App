@@ -38,6 +38,9 @@ class GoalCreate(BaseModel):
     pace_target_description: str = ""
     mvp_threshold: str = ""
     parent_goal_id: int | None = None
+    stake_webhook_url: str | None = None
+    stake_webhook_secret: str | None = None
+    stake_active: bool = False
 
 
 class GoalUpdate(BaseModel):
@@ -54,6 +57,9 @@ class GoalUpdate(BaseModel):
     pace_target_description: str | None = None
     mvp_threshold: str | None = None
     reflection_log: str | None = None
+    stake_webhook_url: str | None = None
+    stake_webhook_secret: str | None = None
+    stake_active: bool | None = None
 
 
 class GoalOut(BaseModel):
@@ -72,6 +78,9 @@ class GoalOut(BaseModel):
     mvp_threshold: str
     parent_goal_id: int | None
     reflection_log: str
+    stake_webhook_url: str | None = None
+    stake_webhook_secret: str | None = None
+    stake_active: bool = False
     created_at: datetime
     updated_at: datetime
 

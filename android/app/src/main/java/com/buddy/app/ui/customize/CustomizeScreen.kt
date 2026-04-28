@@ -535,12 +535,17 @@ private fun UsageCard(usage: UsageResponse?) {
             val ratio = (mtd / soft).coerceIn(0.0, 2.0).toFloat()
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Per spec §21.2: alarm color reserved for true alarms
+                // (hard cap = service stops). Soft cap = noticeable but
+                // not alarmed.
                 Text(
                     text = "$%.2f".format(mtd),
                     style = MaterialTheme.typography.displaySmall,
-                    color = if (usage.hardCapExceeded) MaterialTheme.colorScheme.error
-                        else if (usage.softCapExceeded) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurface,
+                    color = when {
+                        usage.hardCapExceeded -> MaterialTheme.colorScheme.error
+                        usage.softCapExceeded -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
                 )
                 Spacer(Modifier.size(8.dp))
                 Text(
@@ -569,7 +574,7 @@ private fun UsageCard(usage: UsageResponse?) {
                 Text(
                     "Soft cap exceeded. Operations continue; consider tightening if this surprises you.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
