@@ -44,6 +44,9 @@ class HealthResponse(BaseModel):
     memory_repo_status: str
     models_resolved: dict[str, str]
     daily_rhythm: DailyRhythm | None = None
+    # Avoid the field name `schema` because Pydantic reserves it as a
+    # model method.
+    schema_status: dict[str, str] | None = None
     diagnostics: DiagnosticsBlock | None = None
 
 

@@ -69,17 +69,21 @@ async def lifespan(app: FastAPI):
 
 
 async def _ensure_schema_current() -> None:
-    """Run `alembic upgrade head` programmatically, in-process, before
-    the app starts serving traffic. We do it via subprocess (rather than
-    invoking alembic.command directly) because alembic's command API
-    sets up its own logging and config which fights with structlog and
-    occasionally hangs on async event loops.
+    """Run `alembic upgrade head` before the app starts serving. We
+    treat this as best-effort: if it fails, we log loud and let the app
+    come up anyway. The previous policy of refusing to start meant a
+    bad migration locked the user out of the backend entirely (Caddy
+    returned 502 because uvicorn never bound), which is worse than
+    serving with a slightly stale schema and surfacing actionable errors
+    on the affected endpoints.
+
+    Schema status is also exposed on /health so the user can see at a
+    glance whether their DB is at head or stuck.
     """
     import asyncio
     import shutil
     from pathlib import Path
 
-    # Where alembic.ini lives. Repo-root in dev, /app in the docker image.
     repo_root = Path(__file__).resolve().parents[2]
     ini = repo_root / "alembic.ini"
     if not ini.exists():
@@ -90,17 +94,22 @@ async def _ensure_schema_current() -> None:
         log.warn("startup.alembic_binary_missing")
         return
 
-    proc = await asyncio.create_subprocess_exec(
-        "alembic",
-        "-c",
-        str(ini),
-        "upgrade",
-        "head",
-        cwd=str(repo_root),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "alembic",
+            "-c",
+            str(ini),
+            "upgrade",
+            "head",
+            cwd=str(repo_root),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+    except Exception as exc:  # noqa: BLE001
+        log.error("startup.alembic_invocation_failed", error=str(exc))
+        return
+
     if proc.returncode != 0:
         log.error(
             "startup.alembic_upgrade_failed",
@@ -108,11 +117,10 @@ async def _ensure_schema_current() -> None:
             stdout=stdout.decode(errors="ignore")[-2000:],
             stderr=stderr.decode(errors="ignore")[-2000:],
         )
-        # Fail loud rather than serve a half-broken DB.
-        raise RuntimeError(
-            f"alembic upgrade head failed (rc={proc.returncode}); "
-            f"stderr: {stderr.decode(errors='ignore')[-500:]}"
-        )
+        # Don't raise. The backend should still come up so the user can
+        # diagnose via /health and fix from a working app.
+        return
+
     log.info("startup.alembic_upgrade_ok")
 
 

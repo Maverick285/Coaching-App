@@ -72,6 +72,42 @@ async def _build_diagnostics() -> DiagnosticsBlock:
     )
 
 
+async def _schema_status() -> dict[str, str]:
+    """Report the live alembic head vs DB version + a hint on what's
+    missing. Used by /health so the user can spot a stuck migration
+    without SSHing into the box.
+    """
+    factory = get_session_factory()
+    db_version = "unknown"
+    try:
+        async with factory() as s:
+            row = await s.execute(text("SELECT version_num FROM alembic_version"))
+            r = row.scalar_one_or_none()
+            db_version = str(r) if r else "(no alembic_version row)"
+    except Exception as exc:  # noqa: BLE001
+        db_version = f"error: {exc}"
+
+    try:
+        from pathlib import Path
+
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        repo_root = Path(__file__).resolve().parents[3]
+        ini = repo_root / "alembic.ini"
+        cfg = Config(str(ini)) if ini.exists() else Config()
+        cfg.set_main_option("script_location", str(repo_root / "alembic"))
+        head = ScriptDirectory.from_config(cfg).get_current_head() or "unknown"
+    except Exception as exc:  # noqa: BLE001
+        head = f"error: {exc}"
+
+    return {
+        "alembic_db_version": db_version,
+        "alembic_head_version": head,
+        "current": "yes" if db_version == head else "no",
+    }
+
+
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     db_ok = True
@@ -111,5 +147,6 @@ async def health() -> HealthResponse:
         memory_repo_status=repo_status,
         models_resolved=models,
         daily_rhythm=rhythm,
+        schema_status=await _schema_status(),
         diagnostics=await _build_diagnostics(),
     )

@@ -482,6 +482,22 @@ private fun StatusCard(
                 value = health.memoryRepoStatus,
                 good = !health.memoryRepoStatus.startsWith("error"),
             )
+            // DB schema vs alembic head. If "current" is "no" the
+            // backend is running against an out-of-date DB and most
+            // write paths will 500 — fix is to redeploy so the startup
+            // hook re-runs migrations, or run `alembic upgrade head`
+            // by hand on the host.
+            health.schemaStatus?.let { schema ->
+                val current = schema["current"] == "yes"
+                val dbVer = schema["alembic_db_version"] ?: "unknown"
+                val headVer = schema["alembic_head_version"] ?: "unknown"
+                StatusRow(
+                    label = "DB schema",
+                    value = if (current) "$dbVer (at head)"
+                        else "$dbVer  →  needs $headVer",
+                    good = current,
+                )
+            }
 
             // --- Permissions (phone-side) -----------------------------
             val accessibilityOn = isAccessibilityEnabled(context)

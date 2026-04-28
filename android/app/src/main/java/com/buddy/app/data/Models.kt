@@ -42,6 +42,7 @@ data class HealthResponse(
     @SerialName("memory_repo_status") val memoryRepoStatus: String,
     @SerialName("models_resolved") val modelsResolved: Map<String, String>,
     @SerialName("daily_rhythm") val dailyRhythm: DailyRhythm? = null,
+    @SerialName("schema_status") val schemaStatus: Map<String, String>? = null,
     val diagnostics: DiagnosticsBlock? = null,
 )
 
