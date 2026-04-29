@@ -78,10 +78,7 @@ fun DreamsScreen(
         }
     }
 
-    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
-        viewModel.refresh()
-        onPauseOrDispose { }
-    }
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     Scaffold(
         topBar = {

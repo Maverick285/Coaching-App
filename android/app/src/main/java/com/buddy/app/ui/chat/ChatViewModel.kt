@@ -170,6 +170,11 @@ class ChatViewModel(
                         isSending = false,
                     )
                 }
+                if (resp.executedActions.isNotEmpty()) {
+                    // log_progress already happened server-side. Wake
+                    // the data tabs so today's grade reflects it.
+                    com.buddy.app.data.RefreshBus.notifyGoals()
+                }
             } catch (e: Exception) {
                 _state.update {
                     it.copy(
@@ -212,6 +217,9 @@ class ChatViewModel(
                         },
                     )
                 }
+                // Wake up the Goals/Today tabs so the new goal shows
+                // immediately on tab switch instead of next app launch.
+                com.buddy.app.data.RefreshBus.notifyGoals()
             } catch (e: retrofit2.HttpException) {
                 if (e.code() == 409) {
                     _state.update {

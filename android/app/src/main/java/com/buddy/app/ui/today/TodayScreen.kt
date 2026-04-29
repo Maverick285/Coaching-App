@@ -96,11 +96,13 @@ fun TodayScreen(
         }
     }
 
-    // Refresh on every appearance — covers chat-driven log_progress
-    // and goal saves from anywhere in the app.
-    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+    // Refresh on first compose AND every time chat saves a goal or
+    // logs progress.
+    LaunchedEffect(Unit) {
         viewModel.refresh()
-        onPauseOrDispose { }
+        com.buddy.app.data.RefreshBus.goals.collect {
+            viewModel.refresh()
+        }
     }
 
     Scaffold(

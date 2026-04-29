@@ -94,9 +94,13 @@ fun GoalsScreen(
     // just saved from chat (or anywhere else) and the user lands on
     // this tab to see it. Without this, the VM only loads on first
     // entry and shows stale data.
-    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+    // Refresh on every appearance — covers chat-driven goal saves
+    // and any other path that mutates the goal list off-screen.
+    LaunchedEffect(Unit) {
         viewModel.refresh()
-        onPauseOrDispose { }
+        com.buddy.app.data.RefreshBus.goals.collect {
+            viewModel.refresh()
+        }
     }
 
     // One-shot navigation: the create + plan-apply + pause-and-retry
