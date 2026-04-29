@@ -68,14 +68,42 @@ async def lifespan(app: FastAPI):
         log.info("shutdown.complete")
 
 
-async def _detect_orphaned_schema() -> bool:
-    """Detect the 'tables exist but no alembic_version row' state.
+# Marker -> latest revision that introduces it. Used by the orphan-
+# recovery path to figure out what version a DB is *actually* at when
+# alembic_version is missing/empty (e.g. after a factory reset wiped
+# it). The list is in order — the latest matching marker wins.
+#
+#   stake_events table          -> 0007_tier5_stake
+#   blocked_app_rules table     -> 0006_phase5
+#   preferences table           -> 0005_preferences
+#   interventions table         -> 0004_phase4
+#   focus_sessions table        -> 0003_phase3
+#   goals table                 -> 0002_phase2
+#   indexed_documents table     -> 0001_initial
+#
+# We also check the stake_webhook_url column on goals as a finer
+# discriminator for 0007 — the original first-pass migration left
+# some prod DBs with the column added but stake_events not created
+# (or the index missing). Treat any of those signals as "at 0007".
+_MARKER_REVISIONS: list[tuple[str, str]] = [
+    ("stake_events", "0007_tier5_stake"),
+    ("blocked_app_rules", "0006_phase5"),
+    ("preferences", "0005_preferences"),
+    ("interventions", "0004_phase4"),
+    ("focus_sessions", "0003_phase3"),
+    ("goals", "0002_phase2"),
+    ("indexed_documents", "0001_initial"),
+]
 
-    This happens when an earlier factory reset deleted alembic_version
-    along with everything else, or when the DB was bootstrapped via
-    Base.metadata.create_all (e.g. tests). In both cases the schema is
-    actually at head; alembic just doesn't know that. Returns True so
-    the caller stamps head before running upgrade.
+
+async def _detect_orphaned_state() -> tuple[bool, str | None]:
+    """Returns (is_orphaned, detected_revision).
+
+    'Orphaned' means alembic_version exists but is empty (or any state
+    where alembic doesn't know the version but real schema exists).
+    detected_revision is the revision the schema actually matches —
+    the caller stamps THIS, not blindly head, so any later migrations
+    will run normally.
     """
     from sqlalchemy import inspect, text
 
@@ -87,15 +115,37 @@ async def _detect_orphaned_schema() -> bool:
             tables = await conn.run_sync(
                 lambda sync_conn: set(inspect(sync_conn).get_table_names())
             )
-            if "alembic_version" not in tables or "goals" not in tables:
-                # Legitimately empty DB or pre-Phase-2 — let alembic
-                # create from scratch.
-                return False
-            row = await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
-            return row.scalar_one_or_none() is None
+            if "alembic_version" not in tables:
+                # Fresh DB — alembic upgrade head will create everything.
+                return (False, None)
+            if "goals" not in tables:
+                # Pre-Phase-2 DB — also fresh enough to run normal upgrade.
+                return (False, None)
+            row = await conn.execute(
+                text("SELECT version_num FROM alembic_version LIMIT 1")
+            )
+            if row.scalar_one_or_none() is not None:
+                # Has a version — not orphaned.
+                return (False, None)
+
+            # Orphaned: figure out where the schema actually is.
+            # Special-case 0007: it adds a *column* to existing goals
+            # rather than a new table, so we have to look at the
+            # column list as the discriminator.
+            goals_cols = await conn.run_sync(
+                lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns("goals")}
+            )
+            if "stake_webhook_url" in goals_cols and "stake_events" in tables:
+                return (True, "0007_tier5_stake")
+
+            for marker_table, rev in _MARKER_REVISIONS:
+                if marker_table in tables:
+                    return (True, rev)
+            # Tables exist but none we know — best effort, stamp 0001.
+            return (True, "0001_initial")
     except Exception as exc:  # noqa: BLE001
         log.warn("startup.alembic_orphan_detect_failed", error=str(exc)[:200])
-        return False
+        return (False, None)
 
 
 async def _run_alembic(args: list[str], cwd: str) -> tuple[int, str, str]:
@@ -123,17 +173,14 @@ async def _ensure_schema_current() -> None:
     """Bring the database schema up to head before the app serves.
 
     Best-effort: any failure logs loud and lets the app come up anyway.
-    Refusing to start because of a migration glitch locks the user out
-    of the backend entirely (Caddy returns 502 because uvicorn never
-    bound) — strictly worse than serving with a stale schema and
-    surfacing actionable errors on affected endpoints. /health exposes
-    the live schema status so the user can see what happened.
 
     Two-step path:
-      1. If `alembic_version` exists but is empty AND core tables are
-         already there, stamp head. This unsticks DBs orphaned by an
-         earlier factory reset that wiped the version row.
-      2. Run `alembic upgrade head` as usual.
+      1. If the DB is in the orphaned state (tables present, no
+         alembic_version row), detect what revision the schema is
+         actually at and stamp THAT, not head. Stamping head blindly
+         was the previous bug — a 0006-state DB would get stamped 0007
+         and the actual 0007 migration would never run.
+      2. Run `alembic upgrade head` to apply anything still pending.
     """
     import shutil
     from pathlib import Path
@@ -147,13 +194,16 @@ async def _ensure_schema_current() -> None:
         log.warn("startup.alembic_binary_missing")
         return
 
-    if await _detect_orphaned_schema():
-        log.info("startup.alembic_stamping_head_to_recover_orphan")
+    is_orphan, detected = await _detect_orphaned_state()
+    if is_orphan and detected:
+        log.info("startup.alembic_stamp_for_orphan", revision=detected)
         rc, _, err = await _run_alembic(
-            ["-c", str(ini), "stamp", "head"], cwd=str(repo_root)
+            ["-c", str(ini), "stamp", detected], cwd=str(repo_root)
         )
         if rc != 0:
-            log.error("startup.alembic_stamp_failed", code=rc, stderr=err[-500:])
+            log.error(
+                "startup.alembic_stamp_failed", revision=detected, stderr=err[-500:]
+            )
             return
 
     rc, _, err = await _run_alembic(

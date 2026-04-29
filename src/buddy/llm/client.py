@@ -109,18 +109,32 @@ async def chat_with_tool(
     Schema-violation rate on this path is <0.2% per the 2026 benchmarks
     in the master spec; prompt-engineered JSON is 5-12%. We use this for
     every place AI output becomes action.
+
+    On API errors we re-raise with the response body included in the
+    message so /admin/errors shows the actionable failure (model
+    rejecting the schema, tool description too long, etc.) rather than
+    just "Error code: 400".
     """
+    from anthropic import APIError
+
     client = get_anthropic()
     tool_name = tool["name"]
-    resp = await client.messages.create(
-        model=model,
-        system=system,
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        tools=[tool],
-        tool_choice={"type": "tool", "name": tool_name},
-    )
+    try:
+        resp = await client.messages.create(
+            model=model,
+            system=system,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            tools=[tool],
+            tool_choice={"type": "tool", "name": tool_name},
+        )
+    except APIError as api_exc:
+        body = getattr(api_exc, "body", None)
+        status = getattr(api_exc, "status_code", "?")
+        raise RuntimeError(
+            f"Anthropic {status} on {model} with tool {tool_name!r}: {body!r}"
+        ) from api_exc
 
     text = ""
     tool_input: dict | None = None
