@@ -24,6 +24,22 @@ from buddy.memory.store import MemoryStore
 router = APIRouter()
 
 
+@router.get("/admin/errors", dependencies=[Depends(require_auth)])
+async def list_errors() -> dict:
+    """Last 20 unhandled exceptions with full tracebacks. Lives in
+    memory and resets on restart. Surfaced in the Customize screen so
+    the user can read real Python tracebacks without SSH access."""
+    from buddy.services.error_log import snapshot
+    return {"errors": snapshot()}
+
+
+@router.post("/admin/errors/clear", dependencies=[Depends(require_auth)])
+async def clear_errors() -> dict:
+    from buddy.services.error_log import clear
+    clear()
+    return {"ok": True}
+
+
 class AdminResetRequest(BaseModel):
     confirm: str
 

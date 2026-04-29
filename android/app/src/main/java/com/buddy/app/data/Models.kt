@@ -271,6 +271,21 @@ data class DreamActionResponse(
     @SerialName("applied_path") val appliedPath: String? = null,
 )
 
+// --- Admin: error log ----------------------------------------------------
+
+@Serializable
+data class ErrorLogEntry(
+    val ts: String,
+    val method: String,
+    val path: String,
+    val status: Int,
+    val exception: String,
+    val traceback: String,
+)
+
+@Serializable
+data class ErrorLogResponse(val errors: List<ErrorLogEntry> = emptyList())
+
 // --- Admin: factory reset ------------------------------------------------
 
 @Serializable

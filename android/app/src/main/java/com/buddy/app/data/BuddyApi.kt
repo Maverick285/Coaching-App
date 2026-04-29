@@ -235,4 +235,10 @@ interface BuddyApi {
 
     @POST("/admin/reset")
     suspend fun adminReset(@Body req: AdminResetRequest): AdminResetResponse
+
+    @GET("/admin/errors")
+    suspend fun adminErrors(): ErrorLogResponse
+
+    @POST("/admin/errors/clear")
+    suspend fun adminClearErrors(): retrofit2.Response<okhttp3.ResponseBody>
 }

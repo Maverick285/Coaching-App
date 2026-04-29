@@ -43,6 +43,7 @@ data class CustomizeUiState(
     val resetting: Boolean = false,
     val resetDone: Boolean = false,
     val resetSummary: ResetSummary? = null,
+    val recentErrors: List<com.buddy.app.data.ErrorLogEntry> = emptyList(),
     val message: String? = null,
     val error: String? = null,
 )
@@ -116,6 +117,24 @@ class CustomizeViewModel(
                 _state.update { it.copy(usage = usage) }
             } catch (_: Exception) {
                 // Usage is non-fatal — old backends may not have the endpoint.
+            }
+            try {
+                val errs = a.adminErrors().errors
+                _state.update { it.copy(recentErrors = errs) }
+            } catch (_: Exception) {
+                // Old backends predate /admin/errors; harmless no-op.
+            }
+        }
+    }
+
+    fun clearRecentErrors() {
+        val a = api ?: return
+        viewModelScope.launch {
+            try {
+                a.adminClearErrors()
+                _state.update { it.copy(recentErrors = emptyList(), message = "Cleared.") }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
             }
         }
     }

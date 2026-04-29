@@ -220,6 +220,34 @@ fun CustomizeScreen(
 
             HorizontalDivider()
 
+            // --- Recent errors ----------------------------------------
+            // Surfaces real Python tracebacks from the server's last 20
+            // unhandled exceptions, so when something 500s the user
+            // can read the actual cause instead of guessing.
+            if (state.recentErrors.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    SectionHeading("Recent errors")
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { viewModel.clearRecentErrors() }) {
+                        Text("Clear")
+                    }
+                }
+                state.recentErrors.take(5).forEach { e ->
+                    ErrorCard(e)
+                }
+                if (state.recentErrors.size > 5) {
+                    Text(
+                        "+ ${state.recentErrors.size - 5} more",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                HorizontalDivider()
+            }
+
             // --- Quick actions ----------------------------------------
             SectionHeading("Quick actions")
             OutlinedButton(
@@ -350,6 +378,52 @@ fun CustomizeScreen(
         )
     }
 }
+
+@Composable
+private fun ErrorCard(e: com.buddy.app.data.ErrorLogEntry) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(
+        onClick = { expanded = !expanded },
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                "${e.method} ${e.path}  ·  ${e.status}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                e.exception,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                maxLines = if (expanded) Int.MAX_VALUE else 2,
+            )
+            if (expanded && e.traceback.isNotBlank()) {
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    e.traceback,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                )
+            } else if (!expanded) {
+                Text(
+                    "tap to expand traceback",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                e.ts,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 
 @Composable
 private fun SectionHeading(label: String) {

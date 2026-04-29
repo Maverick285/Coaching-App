@@ -217,7 +217,16 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(_: Request, exc: StarletteHTTPException):
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        # Capture 5xx HTTPExceptions (the 502s the planner throws) too.
+        if exc.status_code >= 500:
+            from buddy.services.error_log import record as record_error
+            record_error(
+                method=request.method,
+                path=request.url.path,
+                exc=exc,
+                status=exc.status_code,
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content={"error": "http_error", "detail": exc.detail},
@@ -228,6 +237,34 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=422,
             content={"error": "validation_error", "detail": exc.errors()},
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_handler(request: Request, exc: Exception):
+        """Catch every unhandled exception, persist to the ring buffer
+        so the user can see the real traceback from /admin/errors, and
+        return a structured 500 with the exception class + message.
+        """
+        from buddy.services.error_log import record as record_error
+        record_error(
+            method=request.method,
+            path=request.url.path,
+            exc=exc,
+            status=500,
+        )
+        log.error(
+            "unhandled_exception",
+            method=request.method,
+            path=request.url.path,
+            exception=f"{type(exc).__name__}: {exc}",
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "internal_error",
+                "detail": f"{type(exc).__name__}: {exc}",
+                "hint": "GET /admin/errors for the traceback.",
+            },
         )
 
     return app
