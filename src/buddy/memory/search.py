@@ -83,7 +83,18 @@ async def vector_search(query: str, limit: int) -> list[Hit]:
 
     if not get_settings().openai_api_key or not VEC_AVAILABLE:
         return []
-    vectors, _, _ = await embed([query])
+    # An *invalid* key reaches the API and 401s. Swallow that (and any
+    # other embedding/transport failure) and fall back to BM25-only —
+    # bubbling a 500 out of /converse for a missing-secrets condition
+    # is the wrong tradeoff. Hybrid search becomes keyword-only when
+    # this happens; the user can fix the key from Customize when they
+    # notice degraded retrieval.
+    try:
+        vectors, _, _ = await embed([query])
+    except Exception as exc:  # noqa: BLE001
+        from buddy.logging_setup import get_logger
+        get_logger("search").warn("vector_search.embed_failed", error=str(exc)[:200])
+        return []
     if not vectors:
         return []
     qvec = pack_floats(vectors[0])
