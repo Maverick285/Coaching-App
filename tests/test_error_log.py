@@ -13,7 +13,7 @@ def test_500_is_captured_with_traceback(authed_client, monkeypatch):
     async def boom(**_):
         raise RuntimeError("smoke_test_marker_xyz")
 
-    monkeypatch.setattr("buddy.api.converse.chat", boom)
+    monkeypatch.setattr("buddy.api.converse.chat_with_optional_tools", boom)
     r = authed_client.post("/converse", json={"message": "hi"})
     assert r.status_code in (500, 502)
 
@@ -32,7 +32,7 @@ def test_clear_endpoint_drops_buffer(authed_client, monkeypatch):
     async def boom(**_):
         raise RuntimeError("delete_me")
 
-    monkeypatch.setattr("buddy.api.converse.chat", boom)
+    monkeypatch.setattr("buddy.api.converse.chat_with_optional_tools", boom)
     authed_client.post("/converse", json={"message": "hi"})
     assert len(authed_client.get("/admin/errors").json()["errors"]) >= 1
 

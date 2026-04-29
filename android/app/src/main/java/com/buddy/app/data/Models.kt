@@ -2,6 +2,7 @@ package com.buddy.app.data
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 // --- Health -----------------------------------------------------------------
 
@@ -92,6 +93,17 @@ data class ConverseResponse(
     @SerialName("tokens_out") val tokensOut: Int,
     @SerialName("cost_estimate") val costEstimate: Double,
     @SerialName("memory_loaded") val memoryLoaded: List<MemoryLoadedItem> = emptyList(),
+    // Master spec §44.5 bridge layer.
+    @SerialName("proposed_actions")
+    val proposedActions: List<ProposedAction> = emptyList(),
+    @SerialName("executed_actions")
+    val executedActions: List<JsonObject> = emptyList(),
+)
+
+@Serializable
+data class ProposedAction(
+    val kind: String,
+    val payload: JsonObject,
 )
 
 // --- Conversations ----------------------------------------------------------

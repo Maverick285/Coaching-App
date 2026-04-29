@@ -25,6 +25,9 @@ data class ChatMessage(
     val role: ChatRole,
     val content: String,
     val modelUsed: String = "",
+    // Proposals attached to an assistant turn — rendered as inline
+    // cards under the message bubble. Tap save → creates the goal.
+    val proposals: List<com.buddy.app.data.ProposedAction> = emptyList(),
 )
 
 data class ChatUiState(
@@ -159,6 +162,7 @@ class ChatViewModel(
                     role = ChatRole.ASSISTANT,
                     content = resp.response,
                     modelUsed = resp.modelUsed,
+                    proposals = resp.proposedActions,
                 )
                 _state.update {
                     it.copy(
@@ -174,6 +178,59 @@ class ChatViewModel(
                     )
                 }
             }
+        }
+    }
+
+    /** Save a proposed goal from the inline chat card. Replaces the
+     * proposal on the message with a "saved" marker so the user
+     * can't double-tap. */
+    fun confirmProposeGoal(messageId: String, payload: kotlinx.serialization.json.JsonObject) {
+        val a = api ?: return
+        viewModelScope.launch {
+            try {
+                val req = com.buddy.app.data.GoalCreate(
+                    statement = payload["statement"]?.toString()?.trim('"').orEmpty(),
+                    priority = payload["priority"]?.toString()?.toIntOrNull() ?: 3,
+                    paceTargetAmount = payload["pace_target_amount"]?.toString()?.toDoubleOrNull() ?: 0.0,
+                    paceTargetUnit = payload["pace_target_unit"]?.toString()?.trim('"').orEmpty(),
+                    mvpThreshold = payload["mvp_threshold"]?.toString()?.trim('"').orEmpty(),
+                    deadline = payload["deadline"]?.toString()?.trim('"')
+                        ?.takeIf { it.isNotEmpty() && it != "null" },
+                    timeframe = (payload["deadline"]?.toString()?.trim('"').orEmpty())
+                        .let { if (it.isNotEmpty() && it != "null") "deadline" else "open_ended" },
+                )
+                if (req.statement.isBlank()) {
+                    _state.update { it.copy(error = "Proposal had no statement.") }
+                    return@launch
+                }
+                a.createGoal(req)
+                _state.update { st ->
+                    st.copy(
+                        info = "Saved goal: ${req.statement}",
+                        messages = st.messages.map { m ->
+                            if (m.id == messageId) m.copy(proposals = emptyList()) else m
+                        },
+                    )
+                }
+            } catch (e: retrofit2.HttpException) {
+                if (e.code() == 409) {
+                    _state.update {
+                        it.copy(error = "You're at 4 active goals. Pause one from Goals first.")
+                    }
+                } else {
+                    _state.update { it.copy(error = "Save failed: ${e.code()}") }
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Save failed: ${e.message}") }
+            }
+        }
+    }
+
+    fun dismissProposal(messageId: String) {
+        _state.update { st ->
+            st.copy(messages = st.messages.map { m ->
+                if (m.id == messageId) m.copy(proposals = emptyList()) else m
+            })
         }
     }
 

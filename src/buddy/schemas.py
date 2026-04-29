@@ -97,6 +97,13 @@ class ConverseResponse(BaseModel):
     tokens_out: int
     cost_estimate: float
     memory_loaded: list[MemoryLoadedItem]
+    # Master spec §44.5 bridge layer. proposed_actions are
+    # high-stakes things the model proposed that need user confirm —
+    # rendered as inline cards in chat. executed_actions are
+    # low-stakes things already persisted (e.g. log_progress). Both
+    # default empty for back-compat with older Android builds.
+    proposed_actions: list[dict] = []
+    executed_actions: list[dict] = []
 
 
 # --- Memory ---------------------------------------------------------------

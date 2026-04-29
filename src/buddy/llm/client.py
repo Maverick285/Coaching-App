@@ -176,6 +176,92 @@ async def chat_with_tool(
     )
 
 
+@dataclass
+class OfferedToolCall:
+    """One tool the model decided to call when offered a list of options."""
+
+    name: str
+    input: dict
+
+
+@dataclass
+class ChatWithToolsResult:
+    text: str
+    tool_calls: list[OfferedToolCall]
+    model: str
+    tokens_in: int
+    tokens_out: int
+    cost_usd: float
+    raw: Any
+
+
+async def chat_with_optional_tools(
+    *,
+    model: str,
+    system: str,
+    messages: list[dict[str, Any]],
+    tools: list[dict],
+    max_tokens: int = 1024,
+    temperature: float = 0.7,
+) -> ChatWithToolsResult:
+    """Like `chat()`, but offer the model a list of tools it can
+    optionally call. Used by /converse so the persona can propose
+    actions (create a goal, log progress, etc.) inline during a
+    conversation.
+
+    `tool_choice` defaults to "auto": the model decides whether to
+    text-respond, call a tool, or both. We return the prose text plus
+    every tool_use block as OfferedToolCall entries; the API layer
+    decides which calls to auto-execute (low-stakes) vs. surface as
+    proposals for the user to confirm (high-stakes).
+    """
+    from anthropic import APIError
+
+    client = get_anthropic()
+    try:
+        resp = await client.messages.create(
+            model=model,
+            system=system,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            tools=tools,
+            tool_choice={"type": "auto"},
+        )
+    except APIError as api_exc:
+        body = getattr(api_exc, "body", None)
+        status = getattr(api_exc, "status_code", "?")
+        raise RuntimeError(
+            f"Anthropic {status} on {model} with optional tools: {body!r}"
+        ) from api_exc
+
+    text = ""
+    tool_calls: list[OfferedToolCall] = []
+    for block in resp.content:
+        btype = getattr(block, "type", None)
+        if btype == "text":
+            text += block.text
+        elif btype == "tool_use":
+            tool_calls.append(
+                OfferedToolCall(
+                    name=getattr(block, "name", "") or "",
+                    input=dict(getattr(block, "input", None) or {}),
+                )
+            )
+
+    tokens_in = getattr(resp.usage, "input_tokens", 0) if resp.usage else 0
+    tokens_out = getattr(resp.usage, "output_tokens", 0) if resp.usage else 0
+    return ChatWithToolsResult(
+        text=text,
+        tool_calls=tool_calls,
+        model=model,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_usd=estimate_cost_usd(model, tokens_in, tokens_out),
+        raw=resp,
+    )
+
+
 async def embed(texts: list[str]) -> tuple[list[list[float]], int, float]:
     """Embed a batch of texts. Returns (vectors, total_tokens, cost_usd)."""
     if not texts:

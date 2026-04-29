@@ -188,6 +188,10 @@ fun ChatScreen(
                     MessagesList(
                         messages = state.messages,
                         isSending = state.isSending,
+                        onConfirmProposal = { id, payload ->
+                            viewModel.confirmProposeGoal(id, payload)
+                        },
+                        onDismissProposal = { id -> viewModel.dismissProposal(id) },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
@@ -255,6 +259,8 @@ private fun EmptyConfigPanel(onOpenSettings: () -> Unit) {
 private fun MessagesList(
     messages: List<ChatMessage>,
     isSending: Boolean,
+    onConfirmProposal: (messageId: String, payload: kotlinx.serialization.json.JsonObject) -> Unit = { _, _ -> },
+    onDismissProposal: (messageId: String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -273,7 +279,18 @@ private fun MessagesList(
         contentPadding = PaddingValues(vertical = 12.dp),
     ) {
         items(messages, key = { it.id }) { msg ->
-            MessageBubble(msg)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                MessageBubble(msg)
+                msg.proposals.forEach { proposal ->
+                    if (proposal.kind == "propose_goal") {
+                        ProposeGoalCard(
+                            payload = proposal.payload,
+                            onConfirm = { onConfirmProposal(msg.id, proposal.payload) },
+                            onDismiss = { onDismissProposal(msg.id) },
+                        )
+                    }
+                }
+            }
         }
         if (isSending) {
             item {
@@ -440,5 +457,87 @@ private fun MicButton(onPress: () -> Unit, onRelease: () -> Unit, enabled: Boole
                 MaterialTheme.colorScheme.onSurface
             },
         )
+    }
+}
+
+/**
+ * Inline confirmation card for a `propose_goal` tool call. The
+ * persona's prose still appears in the bubble above; this is the
+ * one-tap save affordance the user confirms or dismisses.
+ *
+ * Renders the proposed statement, priority, deadline (if any), and
+ * pace target (if any) so the user can audit before saving. Edits
+ * happen on the goal-detail screen post-save — keeping the card
+ * one-tap is the point.
+ */
+@Composable
+private fun ProposeGoalCard(
+    payload: kotlinx.serialization.json.JsonObject,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    fun str(key: String): String = payload[key]
+        ?.toString()?.trim('"')?.takeIf { it != "null" && it.isNotEmpty() }
+        .orEmpty()
+
+    val statement = str("statement")
+    val priority = str("priority").toIntOrNull() ?: 3
+    val deadline = str("deadline")
+    val paceAmt = str("pace_target_amount")
+    val paceUnit = str("pace_target_unit")
+    val mvp = str("mvp_threshold")
+    val priorityLabel = when (priority) {
+        1 -> "low"; 2 -> "low-mid"; 4 -> "high"; 5 -> "top"; else -> "medium"
+    }
+
+    androidx.compose.material3.Card(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                "Proposed goal",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            )
+            Text(
+                statement.ifBlank { "(missing statement)" },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            val meta = buildList {
+                add("Priority: $priorityLabel")
+                if (deadline.isNotEmpty()) add("Deadline: $deadline")
+                if (paceAmt.isNotEmpty() && paceUnit.isNotEmpty()) add("Pace: $paceAmt $paceUnit/day")
+                if (mvp.isNotEmpty()) add("Floor: $mvp")
+            }.joinToString("  ·  ")
+            if (meta.isNotEmpty()) {
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.weight(1f),
+                    enabled = statement.isNotBlank(),
+                ) { Text("Save goal") }
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Dismiss") }
+            }
+        }
     }
 }

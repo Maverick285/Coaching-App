@@ -327,6 +327,89 @@ CLASSIFY_CAPTURE_TOOL: dict[str, Any] = {
 }
 
 
+# --- In-chat actions --------------------------------------------------------
+#
+# These are the tool surfaces the persona can call from /converse during
+# a normal back-and-forth (master spec §47). Differ from the synthesis
+# tools above in two ways:
+#   1. Schemas are looser — the user can refine details after.
+#   2. Each one has a stakes level the API layer reads to decide
+#      whether to auto-execute or surface as a proposal card.
+
+PROPOSE_GOAL_INLINE_TOOL: dict[str, Any] = {
+    "name": "propose_goal",
+    "description": (
+        "Propose creating a new goal for the user to confirm. Call this "
+        "when the user clearly intends to commit to or track something "
+        "new ('I want to read 24 books this year', 'help me lose 10 lbs'). "
+        "Do NOT call it for casual mentions or hypotheticals. The user "
+        "will see a card with the proposed goal and tap to save."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "statement": {
+                "type": "string",
+                "description": (
+                    "Crisp restatement of the goal in the user's voice, "
+                    "≤80 chars. e.g. 'Read 24 books this year' not "
+                    "'The user wants to read more books'."
+                ),
+            },
+            "rationale": {
+                "type": "string",
+                "description": "1 sentence on why this matters.",
+            },
+            "priority": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "description": "1=low, 3=medium, 5=top. Default 3.",
+            },
+            "deadline": {
+                "type": ["string", "null"],
+                "description": "ISO date (YYYY-MM-DD) or null for open-ended.",
+            },
+            "pace_target_amount": {"type": "number"},
+            "pace_target_unit": {
+                "type": "string",
+                "description": "e.g. 'pages', 'minutes', 'lbs/week'.",
+            },
+            "mvp_threshold": {
+                "type": "string",
+                "description": (
+                    "Smallest action that still counts as a 1, e.g. "
+                    "'5 pages', '10-min walk'."
+                ),
+            },
+        },
+        "required": ["statement", "rationale"],
+    },
+}
+
+
+LOG_PROGRESS_INLINE_TOOL: dict[str, Any] = {
+    "name": "log_progress",
+    "description": (
+        "Log progress toward an existing active goal. Use this when the "
+        "user reports having done something tied to a known goal: 'read "
+        "30 pages today', 'finished the runsheet'. The progress is "
+        "recorded immediately — don't propose, just log. Pick the goal "
+        "from the active list provided in the system prompt."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "goal_id": {"type": "integer"},
+            "amount": {"type": "number"},
+            "unit": {"type": "string"},
+            "notes": {"type": "string"},
+        },
+        "required": ["goal_id", "amount", "unit"],
+    },
+}
+
+
 # --- Consolidation ----------------------------------------------------------
 
 PROPOSE_CONSOLIDATION_TOOL: dict[str, Any] = {

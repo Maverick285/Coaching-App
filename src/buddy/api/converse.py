@@ -20,10 +20,11 @@ from sqlalchemy import select, text
 from buddy.auth import require_auth
 from buddy.config import get_settings
 from buddy.db import get_session_factory
-from buddy.llm.client import chat
+from buddy.llm.client import chat, chat_with_optional_tools
 from buddy.llm.models import ModelTier, resolve_model
 from buddy.llm.prompts.persona import build_persona_system_prompt, render_goals_block
-from buddy.models import FocusSession
+from buddy.llm.tools import LOG_PROGRESS_INLINE_TOOL, PROPOSE_GOAL_INLINE_TOOL
+from buddy.models import FocusSession, Goal, ProgressLog
 from buddy.llm.router import select_tier
 from buddy.memory.retrieval import assemble_context
 from buddy.memory.store import MemoryStore
@@ -128,16 +129,67 @@ async def converse(req: ConverseRequest) -> ConverseResponse:
     ]
     messages.append({"role": "user", "content": req.message})
 
+    # Offer the persona a small set of inline tools (master spec §47).
+    # The model can choose to text-respond, propose a goal, log
+    # progress against an existing goal, or do both. We auto-execute
+    # the low-stakes ones (log_progress) and surface the high-stakes
+    # ones (propose_goal) as confirmable cards.
+    chat_tools = [PROPOSE_GOAL_INLINE_TOOL, LOG_PROGRESS_INLINE_TOOL]
     try:
-        result = await chat(
+        tool_result = await chat_with_optional_tools(
             model=model,
             system=system_prompt,
             messages=messages,
+            tools=chat_tools,
             max_tokens=2048 if tier is ModelTier.REASONING else 1024,
             temperature=0.7,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LLM request failed: {exc}") from exc
+
+    # Bridge layer: turn the model's tool_use blocks into either
+    # already-executed actions (low-stakes) or proposals returned to the
+    # client (high-stakes for user confirmation).
+    proposed_actions: list[dict] = []
+    executed_actions: list[dict] = []
+    response_text = tool_result.text or ""
+
+    for call in tool_result.tool_calls:
+        if call.name == "log_progress":
+            executed = await _auto_log_progress(call.input)
+            executed_actions.append(executed)
+            # Append a short ack to the persona's text so the user
+            # always sees confirmation of what got logged. Some models
+            # emit only the tool call without prose.
+            if executed.get("ok"):
+                ack = (
+                    f"\n\n_Logged {executed['amount']:g} {executed['unit']} "
+                    f"on \"{executed['goal_statement']}\"._"
+                )
+                response_text = response_text + ack if response_text else ack.strip()
+            else:
+                response_text += f"\n\n_Tried to log progress but {executed.get('error', 'failed')}._"
+        elif call.name == "propose_goal":
+            proposed_actions.append({"kind": "propose_goal", "payload": call.input})
+
+    # Synthesize a default text if the model emitted only a tool_use
+    # with no prose — otherwise the chat bubble would be empty.
+    if not response_text:
+        if proposed_actions:
+            response_text = "I drafted a goal — confirm below to save it."
+        else:
+            response_text = "(empty response)"
+
+    # Re-shape into the same fields as the old chat() result so the
+    # downstream persistence path doesn't have to fork.
+    class _Shim:
+        pass
+    result = _Shim()
+    result.text = response_text
+    result.model = tool_result.model
+    result.tokens_in = tool_result.tokens_in
+    result.tokens_out = tool_result.tokens_out
+    result.cost_usd = tool_result.cost_usd
 
     # 5. Persist user + assistant turns and the usage row.
     user_msg_id = uuid.uuid4().hex
@@ -208,7 +260,55 @@ async def converse(req: ConverseRequest) -> ConverseResponse:
         tokens_out=result.tokens_out,
         cost_estimate=result.cost_usd,
         memory_loaded=[MemoryLoadedItem(**item) for item in memory_loaded_serialized],
+        proposed_actions=proposed_actions,
+        executed_actions=executed_actions,
     )
+
+
+async def _auto_log_progress(payload: dict) -> dict:
+    """Persist a ProgressLog row from a model-emitted log_progress
+    tool call. Returns a small descriptor the API includes in
+    executed_actions so the client can show what was logged.
+
+    Low-stakes per master spec §44.5: execute on tool call, undo
+    available. We validate the goal_id against the current active set
+    so the model can't fabricate a goal_id and successfully insert.
+    """
+    try:
+        goal_id = int(payload.get("goal_id", 0))
+        amount = float(payload.get("amount", 0.0))
+    except (TypeError, ValueError) as exc:
+        return {"ok": False, "error": f"invalid payload: {exc}"}
+    if goal_id <= 0 or amount <= 0:
+        return {"ok": False, "error": "goal_id and amount must be positive"}
+    unit = str(payload.get("unit") or "").strip()
+    notes = str(payload.get("notes") or "").strip()
+
+    factory = get_session_factory()
+    async with factory() as db:
+        goal = await db.get(Goal, goal_id)
+        if goal is None or goal.state != "active":
+            return {"ok": False, "error": f"goal_id={goal_id} not active"}
+        log_row = ProgressLog(
+            goal_id=goal_id,
+            raw_text=notes or f"Logged via chat: {amount:g} {unit}",
+            attributed_units=amount,
+            unit_label=unit,
+            source="chat",
+            confidence=0.95,
+        )
+        db.add(log_row)
+        await db.commit()
+        await db.refresh(log_row)
+    return {
+        "ok": True,
+        "kind": "log_progress",
+        "log_id": log_row.id,
+        "goal_id": goal_id,
+        "goal_statement": goal.statement,
+        "amount": amount,
+        "unit": unit,
+    }
 
 
 def _append_log(
