@@ -37,6 +37,11 @@ data class ChatUiState(
     val isSending: Boolean = false,
     val isListening: Boolean = false,
     val partialTranscript: String = "",
+    // Message IDs whose proposed-goal card has a save in flight. The
+    // Save button on those cards renders disabled so a quick double-
+    // tap can't create two duplicate goals before the first request
+    // returns.
+    val savingProposals: Set<String> = emptySet(),
     val error: String? = null,
     val info: String? = null,
 )
@@ -191,6 +196,13 @@ class ChatViewModel(
      * can't double-tap. */
     fun confirmProposeGoal(messageId: String, payload: kotlinx.serialization.json.JsonObject) {
         val a = api ?: return
+        // Guard against double-tap: if a save for this proposal is
+        // already running, drop the second invocation. The card UI
+        // also renders disabled while in flight, but enforce here too
+        // so a fast second tap during the brief click→state-update
+        // window can't sneak through.
+        if (messageId in _state.value.savingProposals) return
+        _state.update { it.copy(savingProposals = it.savingProposals + messageId) }
         viewModelScope.launch {
             try {
                 val req = com.buddy.app.data.GoalCreate(
@@ -205,7 +217,12 @@ class ChatViewModel(
                         .let { if (it.isNotEmpty() && it != "null") "deadline" else "open_ended" },
                 )
                 if (req.statement.isBlank()) {
-                    _state.update { it.copy(error = "Proposal had no statement.") }
+                    _state.update {
+                        it.copy(
+                            error = "Proposal had no statement.",
+                            savingProposals = it.savingProposals - messageId,
+                        )
+                    }
                     return@launch
                 }
                 a.createGoal(req)
@@ -215,6 +232,7 @@ class ChatViewModel(
                         messages = st.messages.map { m ->
                             if (m.id == messageId) m.copy(proposals = emptyList()) else m
                         },
+                        savingProposals = st.savingProposals - messageId,
                     )
                 }
                 // Wake up the Goals/Today tabs so the new goal shows
@@ -223,13 +241,26 @@ class ChatViewModel(
             } catch (e: retrofit2.HttpException) {
                 if (e.code() == 409) {
                     _state.update {
-                        it.copy(error = "You're at 4 active goals. Pause one from Goals first.")
+                        it.copy(
+                            error = "You're at 4 active goals. Pause one from Goals first.",
+                            savingProposals = it.savingProposals - messageId,
+                        )
                     }
                 } else {
-                    _state.update { it.copy(error = "Save failed: ${e.code()}") }
+                    _state.update {
+                        it.copy(
+                            error = "Save failed: ${e.code()}",
+                            savingProposals = it.savingProposals - messageId,
+                        )
+                    }
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(error = "Save failed: ${e.message}") }
+                _state.update {
+                    it.copy(
+                        error = "Save failed: ${e.message}",
+                        savingProposals = it.savingProposals - messageId,
+                    )
+                }
             }
         }
     }

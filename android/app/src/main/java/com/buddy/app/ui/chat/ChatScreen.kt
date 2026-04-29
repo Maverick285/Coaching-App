@@ -188,6 +188,7 @@ fun ChatScreen(
                     MessagesList(
                         messages = state.messages,
                         isSending = state.isSending,
+                        savingProposals = state.savingProposals,
                         onConfirmProposal = { id, payload ->
                             viewModel.confirmProposeGoal(id, payload)
                         },
@@ -259,6 +260,7 @@ private fun EmptyConfigPanel(onOpenSettings: () -> Unit) {
 private fun MessagesList(
     messages: List<ChatMessage>,
     isSending: Boolean,
+    savingProposals: Set<String> = emptySet(),
     onConfirmProposal: (messageId: String, payload: kotlinx.serialization.json.JsonObject) -> Unit = { _, _ -> },
     onDismissProposal: (messageId: String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -285,6 +287,7 @@ private fun MessagesList(
                     if (proposal.kind == "propose_goal") {
                         ProposeGoalCard(
                             payload = proposal.payload,
+                            saving = msg.id in savingProposals,
                             onConfirm = { onConfirmProposal(msg.id, proposal.payload) },
                             onDismiss = { onDismissProposal(msg.id) },
                         )
@@ -473,6 +476,7 @@ private fun MicButton(onPress: () -> Unit, onRelease: () -> Unit, enabled: Boole
 @Composable
 private fun ProposeGoalCard(
     payload: kotlinx.serialization.json.JsonObject,
+    saving: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -531,11 +535,25 @@ private fun ProposeGoalCard(
                 androidx.compose.material3.Button(
                     onClick = onConfirm,
                     modifier = Modifier.weight(1f),
-                    enabled = statement.isNotBlank(),
-                ) { Text("Save goal") }
+                    // Disable while a save is in flight so a fast
+                    // double-tap can't create two of the same goal.
+                    enabled = statement.isNotBlank() && !saving,
+                ) {
+                    if (saving) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text("Saving…")
+                    } else {
+                        Text("Save goal")
+                    }
+                }
                 androidx.compose.material3.OutlinedButton(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
+                    enabled = !saving,
                 ) { Text("Dismiss") }
             }
         }
