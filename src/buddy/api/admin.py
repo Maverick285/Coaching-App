@@ -33,9 +33,13 @@ class AdminResetResponse(BaseModel):
     cleared_files: list[str]
 
 
-# Tables whose rows we DO want to keep across a factory reset. Empty for
-# now: even preferences should reset so the user re-runs onboarding.
-PRESERVE_ROWS_IN: set[str] = set()
+# Tables whose rows we keep across a factory reset.
+#
+# `alembic_version` is here because deleting it puts alembic into an
+# unbootstrappable state on the next launch: it sees "no version row"
+# → tries to migrate from base → hits "table goals already exists" →
+# fails. We're wiping data, not the schema's identity.
+PRESERVE_ROWS_IN: set[str] = {"alembic_version"}
 
 
 @router.post(

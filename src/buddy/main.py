@@ -68,19 +68,73 @@ async def lifespan(app: FastAPI):
         log.info("shutdown.complete")
 
 
-async def _ensure_schema_current() -> None:
-    """Run `alembic upgrade head` before the app starts serving. We
-    treat this as best-effort: if it fails, we log loud and let the app
-    come up anyway. The previous policy of refusing to start meant a
-    bad migration locked the user out of the backend entirely (Caddy
-    returned 502 because uvicorn never bound), which is worse than
-    serving with a slightly stale schema and surfacing actionable errors
-    on the affected endpoints.
+async def _detect_orphaned_schema() -> bool:
+    """Detect the 'tables exist but no alembic_version row' state.
 
-    Schema status is also exposed on /health so the user can see at a
-    glance whether their DB is at head or stuck.
+    This happens when an earlier factory reset deleted alembic_version
+    along with everything else, or when the DB was bootstrapped via
+    Base.metadata.create_all (e.g. tests). In both cases the schema is
+    actually at head; alembic just doesn't know that. Returns True so
+    the caller stamps head before running upgrade.
     """
+    from sqlalchemy import inspect, text
+
+    from buddy.db import get_engine
+
+    try:
+        engine = get_engine()
+        async with engine.begin() as conn:
+            tables = await conn.run_sync(
+                lambda sync_conn: set(inspect(sync_conn).get_table_names())
+            )
+            if "alembic_version" not in tables or "goals" not in tables:
+                # Legitimately empty DB or pre-Phase-2 — let alembic
+                # create from scratch.
+                return False
+            row = await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+            return row.scalar_one_or_none() is None
+    except Exception as exc:  # noqa: BLE001
+        log.warn("startup.alembic_orphan_detect_failed", error=str(exc)[:200])
+        return False
+
+
+async def _run_alembic(args: list[str], cwd: str) -> tuple[int, str, str]:
+    """Run `alembic <args>` in cwd; return (returncode, stdout, stderr)."""
     import asyncio
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "alembic", *args,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        return (
+            proc.returncode or 0,
+            stdout.decode(errors="ignore"),
+            stderr.decode(errors="ignore"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return (-1, "", f"invocation failed: {exc}")
+
+
+async def _ensure_schema_current() -> None:
+    """Bring the database schema up to head before the app serves.
+
+    Best-effort: any failure logs loud and lets the app come up anyway.
+    Refusing to start because of a migration glitch locks the user out
+    of the backend entirely (Caddy returns 502 because uvicorn never
+    bound) — strictly worse than serving with a stale schema and
+    surfacing actionable errors on affected endpoints. /health exposes
+    the live schema status so the user can see what happened.
+
+    Two-step path:
+      1. If `alembic_version` exists but is empty AND core tables are
+         already there, stamp head. This unsticks DBs orphaned by an
+         earlier factory reset that wiped the version row.
+      2. Run `alembic upgrade head` as usual.
+    """
     import shutil
     from pathlib import Path
 
@@ -89,38 +143,25 @@ async def _ensure_schema_current() -> None:
     if not ini.exists():
         log.warn("startup.alembic_ini_missing", path=str(ini))
         return
-
     if shutil.which("alembic") is None:
         log.warn("startup.alembic_binary_missing")
         return
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "alembic",
-            "-c",
-            str(ini),
-            "upgrade",
-            "head",
-            cwd=str(repo_root),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+    if await _detect_orphaned_schema():
+        log.info("startup.alembic_stamping_head_to_recover_orphan")
+        rc, _, err = await _run_alembic(
+            ["-c", str(ini), "stamp", "head"], cwd=str(repo_root)
         )
-        stdout, stderr = await proc.communicate()
-    except Exception as exc:  # noqa: BLE001
-        log.error("startup.alembic_invocation_failed", error=str(exc))
-        return
+        if rc != 0:
+            log.error("startup.alembic_stamp_failed", code=rc, stderr=err[-500:])
+            return
 
-    if proc.returncode != 0:
-        log.error(
-            "startup.alembic_upgrade_failed",
-            code=proc.returncode,
-            stdout=stdout.decode(errors="ignore")[-2000:],
-            stderr=stderr.decode(errors="ignore")[-2000:],
-        )
-        # Don't raise. The backend should still come up so the user can
-        # diagnose via /health and fix from a working app.
+    rc, _, err = await _run_alembic(
+        ["-c", str(ini), "upgrade", "head"], cwd=str(repo_root)
+    )
+    if rc != 0:
+        log.error("startup.alembic_upgrade_failed", code=rc, stderr=err[-2000:])
         return
-
     log.info("startup.alembic_upgrade_ok")
 
 
