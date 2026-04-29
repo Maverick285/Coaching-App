@@ -413,9 +413,29 @@ private fun DetailBody(
                     )
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        AssistChip(onClick = {}, label = { Text("P${goal.priority}") })
-                        AssistChip(onClick = {}, label = { Text(goal.state) })
-                        AssistChip(onClick = {}, label = { Text(goal.approach) })
+                        // Show plain-English labels instead of the
+                        // raw priority integer ("P5") and the raw
+                        // approach enum ("user_driven"). Internal
+                        // codes belong in the DB, not on the screen.
+                        val priorityLabel = when (goal.priority) {
+                            1 -> "Low priority"
+                            2 -> "Low-mid priority"
+                            3 -> "Medium priority"
+                            4 -> "High priority"
+                            5 -> "Top priority"
+                            else -> "Priority ${goal.priority}"
+                        }
+                        val stateLabel = goal.state.replaceFirstChar { it.uppercase() }
+                        val approachLabel = when (goal.approach) {
+                            "user_driven" -> "I drive"
+                            "system_assisted" -> "Coach pushes"
+                            "hybrid" -> "Hybrid"
+                            else -> goal.approach.replace('_', ' ')
+                                .replaceFirstChar { it.uppercase() }
+                        }
+                        AssistChip(onClick = {}, label = { Text(priorityLabel) })
+                        AssistChip(onClick = {}, label = { Text(stateLabel) })
+                        AssistChip(onClick = {}, label = { Text(approachLabel) })
                     }
                     Spacer(Modifier.height(10.dp))
                     if (goal.paceTargetAmount > 0.0) {

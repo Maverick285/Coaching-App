@@ -92,12 +92,20 @@ fun AppNavGraph(
                             selected = currentRoute == dest.route,
                             onClick = {
                                 if (currentRoute != dest.route) {
+                                    // Pop everything down to start
+                                    // (Today) and re-navigate. We
+                                    // intentionally drop the
+                                    // saveState/restoreState pair —
+                                    // it caused tab switches to land
+                                    // on stale or wrong destinations
+                                    // (tapping Today sometimes showed
+                                    // Goals). Fresh mount per tab is
+                                    // simpler and bulletproof.
                                     navController.navigate(dest.route) {
-                                        popUpTo(navController.graph.startDestinationId) {
-                                            saveState = true
-                                        }
+                                        popUpTo(
+                                            navController.graph.startDestinationId
+                                        ) { inclusive = false }
                                         launchSingleTop = true
-                                        restoreState = true
                                     }
                                 }
                             },

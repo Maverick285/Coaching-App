@@ -668,9 +668,31 @@ private fun PlanReview(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Approach: ${plan.approach}", style = MaterialTheme.typography.labelMedium)
-                Text("Priority: ${plan.priority}", style = MaterialTheme.typography.labelMedium)
-                Text("Intervention ceiling: T${plan.interventionCeiling}", style = MaterialTheme.typography.labelMedium)
+                val approachLabel = when (plan.approach) {
+                    "user_driven" -> "I drive this"
+                    "system_assisted" -> "Coach pushes"
+                    "hybrid" -> "We work on it together"
+                    else -> plan.approach.replace('_', ' ')
+                }
+                val priorityLabel = when (plan.priority) {
+                    1 -> "Low priority"
+                    2 -> "Low-mid priority"
+                    3 -> "Medium priority"
+                    4 -> "High priority"
+                    5 -> "Top priority"
+                    else -> "Priority ${plan.priority}"
+                }
+                val nudgeLabel = when (plan.interventionCeiling) {
+                    0 -> "Quiet — no nudges"
+                    1 -> "Gentle nudges"
+                    2 -> "Active nudges"
+                    3 -> "Directive — friction overlays"
+                    4 -> "Strict — hard blocks"
+                    else -> "Nudge level ${plan.interventionCeiling}"
+                }
+                Text(approachLabel, style = MaterialTheme.typography.labelMedium)
+                Text(priorityLabel, style = MaterialTheme.typography.labelMedium)
+                Text(nudgeLabel, style = MaterialTheme.typography.labelMedium)
                 if (plan.deadline != null) {
                     Text("Deadline: ${plan.deadline}", style = MaterialTheme.typography.labelMedium)
                 }

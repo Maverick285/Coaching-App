@@ -149,6 +149,11 @@ fun CustomizeScreen(
 
             HorizontalDivider()
 
+            // --- How this works -----------------------------------------
+            HowThisWorksCard(rhythm = state.health?.dailyRhythm)
+
+            HorizontalDivider()
+
             // --- Profile section ---------------------------------------
             SectionHeading("Names")
             OutlinedTextField(
@@ -434,6 +439,83 @@ private fun SectionHeading(label: String) {
     )
 }
 
+/**
+ * Plain-English explainer of how the Coach actually works. The
+ * design is deliberately mostly-silent (proactive surfacing only at
+ * boundaries, per master spec §53), but that's not communicated
+ * anywhere else — so users assume the system is broken when in fact
+ * it's just not nagging. This card states the cadence directly and
+ * tells the user how to use the Coach as a tool.
+ */
+@Composable
+private fun HowThisWorksCard(rhythm: com.buddy.app.data.DailyRhythm?) {
+    fun fmtHour(h: Int): String {
+        val hh = ((h + 11) % 12) + 1
+        val ampm = if (h < 12) "AM" else "PM"
+        return "$hh $ampm"
+    }
+    val morning = rhythm?.morningHour?.let { fmtHour(it) } ?: "morning"
+    val eod = rhythm?.endOfDayHour?.let { fmtHour(it) } ?: "evening"
+
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "How this works",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            HowRow(
+                "$morning — morning check-in",
+                "A short notification asking what's on your plate today.",
+            )
+            HowRow(
+                "$eod — end-of-day grade",
+                "The Coach computes today's score across your active goals. If a goal had no progress at all, you'll get one nudge — that's the no-zero-day floor.",
+            )
+            HowRow(
+                "Otherwise the Coach is quiet",
+                "It won't nag mid-day. If you want feedback, open the Coach tab and ask. Talking is on you.",
+            )
+            HowRow(
+                "Logging progress",
+                "Tell the Coach in chat: \"read 30 pages today.\" It'll log it against your reading goal automatically.",
+            )
+            HowRow(
+                "Saving a goal from chat",
+                "Just say what you want. The Coach proposes a goal card; tap Save and it's tracked.",
+            )
+            HowRow(
+                "Focus sessions",
+                "Tap a goal → Start focus. While a session is active, the Coach watches for drift and nudges you back.",
+            )
+        }
+    }
+}
+
+@Composable
+private fun HowRow(headline: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            headline,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+        )
+        Text(
+            body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun MemoryRow(path: String, bytes: Int, onEdit: () -> Unit) {
     Card(
@@ -586,7 +668,7 @@ private fun StatusCard(
             )
             StatusRow(label = "Notifications", value = if (notifsOn) "granted" else "missing", good = notifsOn)
             StatusRow(label = "Usage access (phone drift)", value = if (usageStatsOn) "granted" else "missing", good = usageStatsOn)
-            StatusRow(label = "Accessibility (T3/T4 blocks)", value = if (accessibilityOn) "granted" else "not granted", good = accessibilityOn)
+            StatusRow(label = "Accessibility (for app blocks)", value = if (accessibilityOn) "granted" else "not granted", good = accessibilityOn)
 
             // --- Scheduler diagnostics --------------------------------
             health.diagnostics?.let { d ->
