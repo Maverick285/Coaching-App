@@ -73,6 +73,18 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    // Robolectric needs Android resources packaged into the test
+    // classpath. Without `includeAndroidResources = true`, Compose
+    // tests that resolve `MaterialTheme` (every one of ours) blow up
+    // looking for `android.content.res.Resources`. Returning default
+    // values keeps tests fast without an emulator.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -103,7 +115,19 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // Test
+    // Test — Robolectric + Compose UI test on the JVM (no emulator).
+    // Catches runtime crashes-on-screen-mount that compile fine
+    // (e.g. unresolved Compose APIs, NPE in initial recompose, ViewModel
+    // wiring errors). The emulator-based androidTest sourceSet stays
+    // for instrumentation tests if we ever add them.
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.runner)
+    testImplementation(libs.androidx.test.rules)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.kotlinx.coroutines.android)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(libs.androidx.junit)
 }
