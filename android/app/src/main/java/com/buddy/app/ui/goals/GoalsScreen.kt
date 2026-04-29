@@ -90,6 +90,15 @@ fun GoalsScreen(
         }
     }
 
+    // Refresh on every appearance — covers the case where a goal was
+    // just saved from chat (or anywhere else) and the user lands on
+    // this tab to see it. Without this, the VM only loads on first
+    // entry and shows stale data.
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        viewModel.refresh()
+        onPauseOrDispose { }
+    }
+
     // One-shot navigation: the create + plan-apply + pause-and-retry
     // paths all funnel into justCreatedGoalId. We close any open sheet,
     // pop to goal detail, then clear the event.
