@@ -190,6 +190,15 @@ interface BuddyApi {
         @Body req: MemoryFileWrite,
     ): MemoryFileContent
 
+    @GET("/daily-plan/today")
+    suspend fun dailyPlanToday(): DailyPlan
+
+    @POST("/daily-plan/items/{id}/action")
+    suspend fun dailyPlanAction(
+        @retrofit2.http.Path("id") id: Int,
+        @Body req: DailyPlanItemActionRequest,
+    ): DailyPlanItem
+
     @GET("/memory/dreams")
     suspend fun dreams(): DreamsResponse
 

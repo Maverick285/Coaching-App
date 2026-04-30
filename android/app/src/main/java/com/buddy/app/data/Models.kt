@@ -283,6 +283,43 @@ data class DreamActionResponse(
     @SerialName("applied_path") val appliedPath: String? = null,
 )
 
+// --- Daily plan ----------------------------------------------------------
+
+@Serializable
+data class DailyPlanItem(
+    val id: Int,
+    @SerialName("plan_id") val planId: Int,
+    @SerialName("goal_id") val goalId: Int,
+    @SerialName("task_text") val taskText: String,
+    val tier: String,                          // "must" | "should" | "could"
+    @SerialName("est_minutes") val estMinutes: Int,
+    val rationale: String = "",
+    val state: String,                          // "pending" | "done" | "deferred" | "declined"
+    @SerialName("defer_reason") val deferReason: String = "",
+    @SerialName("defer_until") val deferUntil: String? = null,
+    @SerialName("defer_context") val deferContext: String = "",
+    val position: Int = 0,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("completed_at") val completedAt: String? = null,
+)
+
+@Serializable
+data class DailyPlan(
+    val id: Int,
+    @SerialName("plan_date") val planDate: String,
+    val status: String,
+    val rationale: String = "",
+    val items: List<DailyPlanItem> = emptyList(),
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+@Serializable
+data class DailyPlanItemActionRequest(
+    val action: String,                         // "done" | "defer" | "decline"
+    val reason: String? = null,
+)
+
 // --- Admin: error log ----------------------------------------------------
 
 @Serializable

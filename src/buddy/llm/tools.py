@@ -410,8 +410,6 @@ LOG_PROGRESS_INLINE_TOOL: dict[str, Any] = {
 }
 
 
-# --- Consolidation ----------------------------------------------------------
-
 PROPOSE_CONSOLIDATION_TOOL: dict[str, Any] = {
     "name": "propose_consolidation",
     "description": (
@@ -452,5 +450,101 @@ PROPOSE_CONSOLIDATION_TOOL: dict[str, Any] = {
             },
         },
         "required": ["day_summary", "auto_apply", "review"],
+    },
+}
+
+
+# --- Daily plan -------------------------------------------------------------
+
+GENERATE_DAILY_PLAN_TOOL: dict[str, Any] = {
+    "name": "generate_daily_plan",
+    "description": (
+        "Build today's plan as a list of tiered, goal-derived tasks. "
+        "STRICT RULES: every task must trace to one of the active "
+        "goals provided in the prompt by goal_id. Do NOT include life "
+        "admin (eating, sleeping, hygiene, errands). Do NOT propose "
+        "anything that the user hasn't already committed to via a "
+        "saved goal. Tier each task: 'must' (skipping breaks the "
+        "day), 'should' (target pace), 'could' (stretch / if time). "
+        "Estimates are honest minutes — under-estimate is worse than "
+        "over."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "rationale": {
+                "type": "string",
+                "description": (
+                    "1-3 sentences for the user explaining the shape "
+                    "of today's plan. Plain English, the persona's "
+                    "voice."
+                ),
+            },
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "goal_id": {
+                            "type": "integer",
+                            "description": "Must match one of the active goal IDs.",
+                        },
+                        "task_text": {
+                            "type": "string",
+                            "description": (
+                                "Concrete, action-first phrasing. "
+                                "'Read 30 pages of Thinking Fast and "
+                                "Slow' not 'reading'."
+                            ),
+                        },
+                        "tier": {
+                            "type": "string",
+                            "enum": ["must", "should", "could"],
+                        },
+                        "est_minutes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 480,
+                        },
+                        "rationale": {
+                            "type": "string",
+                            "description": "1 line on why this slot.",
+                        },
+                    },
+                    "required": ["goal_id", "task_text", "tier", "est_minutes"],
+                },
+            },
+        },
+        "required": ["rationale", "items"],
+    },
+}
+
+
+PARSE_DEFERRAL_TOOL: dict[str, Any] = {
+    "name": "parse_deferral_reason",
+    "description": (
+        "Read a free-text deferral reason from the user (e.g. \"I'll "
+        "do that tomorrow while I'm in OKC\") and extract any explicit "
+        "or implicit defer-until date plus the contextual note. If "
+        "the user gave no specific date, return defer_until_iso=null "
+        "and let context speak for itself."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "defer_until_iso": {
+                "type": ["string", "null"],
+                "description": "YYYY-MM-DD or null if no specific date.",
+            },
+            "context_note": {
+                "type": "string",
+                "description": (
+                    "Short summary of WHY, in third-person. The "
+                    "Coach uses this on future days to avoid "
+                    "re-proposing the same task in the same window."
+                ),
+            },
+        },
+        "required": ["context_note"],
     },
 }

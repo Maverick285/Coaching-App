@@ -483,3 +483,62 @@ class Preference(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+
+
+# --- Daily plan (master spec §15: daily loop / "Coach me today") ----------
+
+
+class DailyPlan(Base):
+    """One row per day. The first time a user opens Today on a new
+    date and active goals exist, this gets created and populated with
+    `DailyPlanItem` rows by a reasoning-tier tool call."""
+
+    __tablename__ = "daily_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
+    status: Mapped[str] = mapped_column(
+        String(16), default="active", nullable=False
+    )  # active | done
+    rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class DailyPlanItem(Base):
+    """One actionable task in a daily plan — derived from a saved
+    goal, never from life admin (no "eat lunch", no "go to bed").
+
+    Tier rides the master spec §21.2 ADHD-safe palette: must = full
+    color, should = dimmed primary, could = onSurfaceVariant. The
+    visual gradient signals weight without alarm color."""
+
+    __tablename__ = "daily_plan_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    goal_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    task_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Tier values: "must", "should", "could".
+    tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    est_minutes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # State values: "pending", "done", "deferred", "declined".
+    state: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False
+    )
+    # Free-text reason the user attached when deferring or declining.
+    # Parsed out into `defer_until` + `defer_context` by a fast-tier
+    # tool call so future plans can take it into account.
+    defer_reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    defer_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    defer_context: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -12,25 +12,32 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,21 +61,17 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.buddy.app.capture.CaptureActivity
+import com.buddy.app.data.DailyPlanItem
 import com.buddy.app.data.DayGrade
-import com.buddy.app.data.FocusSession
+import com.buddy.app.data.Goal
 import com.buddy.app.data.StreakResponse
-import com.buddy.app.data.Task
 
 /**
- * Home / Today screen. Per master spec §23.2 the job is to answer one
- * question: *what should I do right now?*
- *
- * Layout (§27.1):
- *   Top    — today's status (day grade, streak, persona greeting)
- *   Middle — the next-action card (active session / EOD / next task)
- *   Bottom — today's open tasks list (3-5 by spec; we show all open ones
- *            but sorted with the most relevant on top)
- *   FAB    — voice/text capture entry
+ * Today screen, rebuilt around the "Coach me today" daily plan
+ * (master spec §15). On first morning use of a new day, the backend
+ * generates a plan: goal-derived tasks tiered Must / Should / Could.
+ * Each item is a card with done / later / skip / "tell coach why"
+ * actions. Day grade + streak ride along at the top.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +92,7 @@ fun TodayScreen(
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
+    var explainItem by remember { mutableStateOf<DailyPlanItem?>(null) }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -96,13 +101,9 @@ fun TodayScreen(
         }
     }
 
-    // Refresh on first compose AND every time chat saves a goal or
-    // logs progress.
     LaunchedEffect(Unit) {
         viewModel.refresh()
-        com.buddy.app.data.RefreshBus.goals.collect {
-            viewModel.refresh()
-        }
+        com.buddy.app.data.RefreshBus.goals.collect { viewModel.refresh() }
     }
 
     Scaffold(
@@ -110,10 +111,6 @@ fun TodayScreen(
             TopAppBar(
                 title = { Text("Today") },
                 actions = {
-                    // Three-dots overflow. Spec §23 puts settings
-                    // behind nav, but the user shouldn't have to thread
-                    // Chat → Settings to reach Customize. Today is
-                    // every-launch, so the menu lives here.
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "Menu")
                     }
@@ -123,17 +120,11 @@ fun TodayScreen(
                     ) {
                         DropdownMenuItem(
                             text = { Text("Customize") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenCustomize()
-                            },
+                            onClick = { menuOpen = false; onOpenCustomize() },
                         )
                         DropdownMenuItem(
                             text = { Text("Settings") },
-                            onClick = {
-                                menuOpen = false
-                                onOpenSettings()
-                            },
+                            onClick = { menuOpen = false; onOpenSettings() },
                         )
                     }
                 },
@@ -144,80 +135,122 @@ fun TodayScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    context.startActivity(
-                        android.content.Intent(context, CaptureActivity::class.java)
-                            .putExtra(CaptureActivity.EXTRA_SOURCE, "today_fab")
-                    )
-                },
-            ) { Icon(Icons.Filled.GraphicEq, contentDescription = "Quick capture") }
+            FloatingActionButton(onClick = {
+                context.startActivity(
+                    android.content.Intent(context, CaptureActivity::class.java)
+                        .putExtra(CaptureActivity.EXTRA_SOURCE, "today_fab")
+                )
+            }) { Icon(Icons.Filled.GraphicEq, contentDescription = "Quick capture") }
         },
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        when (state.mode) {
-            TodayMode.NOT_CONFIGURED -> Column(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
-            ) {
+        if (!state.configured) {
+            Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
                 Text(
                     "Configure backend in Settings first.",
                     color = MaterialTheme.colorScheme.onBackground,
                 )
             }
-            TodayMode.LOADING -> Box(
+            return@Scaffold
+        }
+        if (state.loading && state.plan == null) {
+            Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                item { StatusHeader(grade = state.grade, streak = state.streak) }
+            return@Scaffold
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                StatusHeader(grade = state.grade, streak = state.streak)
+            }
+
+            val plan = state.plan
+            if (plan != null && plan.rationale.isNotBlank()) {
                 item {
-                    NextActionCard(
-                        mode = state.mode,
-                        activeSession = state.activeSession,
-                        nextTask = state.openTasks.firstOrNull(),
-                        nextTaskGoal = state.openTasks.firstOrNull()
-                            ?.goalId
-                            ?.let { state.goalsById[it] },
-                        pendingDreams = state.pendingDreams,
-                        onOpenGoals = onOpenGoals,
-                        onOpenChat = onOpenChat,
-                        onOpenFocus = onOpenFocus,
+                    Text(
+                        plan.rationale,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
                     )
                 }
+            }
 
-                if (state.openTasks.isNotEmpty()) {
-                    item {
-                        Text(
-                            "Today's tasks",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-                        )
-                    }
-                    items(state.openTasks.take(5), key = { it.id }) { t ->
-                        val goal = state.goalsById[t.goalId]
-                        TodayTaskRow(
-                            task = t,
-                            goalLabel = goal?.statement,
-                            onToggle = { viewModel.toggleTaskDone(t) },
-                            onClick = { goal?.let { onOpenGoalDetail(it.id) } },
-                        )
-                    }
-                    if (state.openTasks.size > 5) {
-                        item {
-                            TextButton(onClick = onOpenGoals) {
-                                Text("See all ${state.openTasks.size} open tasks →")
-                            }
+            if (plan == null || plan.items.isEmpty()) {
+                item {
+                    EmptyPlanCard(
+                        hasGoals = state.goalsById.isNotEmpty(),
+                        onOpenGoals = onOpenGoals,
+                        onOpenChat = onOpenChat,
+                    )
+                }
+            } else {
+                val pending = plan.items.filter { it.state == "pending" }
+                val finished = plan.items.filter { it.state != "pending" }
+                listOf("must", "should", "could").forEach { tier ->
+                    val tierItems = pending.filter { it.tier == tier }
+                    if (tierItems.isNotEmpty()) {
+                        item { TierHeader(tier = tier, count = tierItems.size) }
+                        items(tierItems, key = { "p-${it.id}" }) { item ->
+                            PlanItemCard(
+                                item = item,
+                                goal = state.goalsById[item.goalId],
+                                saving = item.id in state.savingItemIds,
+                                onDone = { viewModel.markDone(item) },
+                                onLater = { viewModel.deferUntilLater(item) },
+                                onSkip = { viewModel.decline(item) },
+                                onExplain = { explainItem = item },
+                                onOpenGoal = { onOpenGoalDetail(item.goalId) },
+                            )
                         }
                     }
                 }
+                if (finished.isNotEmpty()) {
+                    item { TierHeader(tier = "done", count = finished.size) }
+                    items(finished, key = { "f-${it.id}" }) { item ->
+                        FinishedItemRow(item = item, goal = state.goalsById[item.goalId])
+                    }
+                }
+            }
+
+            if (state.pendingDreams > 0) {
+                item {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${state.pendingDreams} memory proposal${if (state.pendingDreams == 1) "" else "s"} waiting in Dreams.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
+    }
+
+    explainItem?.let { item ->
+        ExplainSheet(
+            item = item,
+            onDismiss = { explainItem = null },
+            onDefer = { reason ->
+                viewModel.deferUntilLater(item, reason)
+                explainItem = null
+            },
+            onSkip = { reason ->
+                if (reason.isNotBlank()) {
+                    // Decline still records the user's reason on the row
+                    // for future plan generations to consider.
+                    viewModel.deferUntilLater(item, reason)
+                } else {
+                    viewModel.decline(item)
+                }
+                explainItem = null
+            },
+        )
     }
 }
 
@@ -230,14 +263,9 @@ private fun StatusHeader(grade: DayGrade?, streak: StreakResponse?) {
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                // Grade is the largest element on the screen — par-1
-                // is what the user is checking when they open the app.
+            Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     grade?.systemScore?.let { "%.1f".format(it) } ?: "—",
                     style = MaterialTheme.typography.displayLarge,
@@ -258,145 +286,260 @@ private fun StatusHeader(grade: DayGrade?, streak: StreakResponse?) {
 }
 
 @Composable
-private fun NextActionCard(
-    mode: TodayMode,
-    activeSession: FocusSession?,
-    nextTask: Task?,
-    nextTaskGoal: com.buddy.app.data.Goal?,
-    pendingDreams: Int,
+private fun TierHeader(tier: String, count: Int) {
+    val label = when (tier) {
+        "must" -> "Must do"
+        "should" -> "Should do"
+        "could" -> "Could do"
+        "done" -> "Done & dismissed"
+        else -> tier
+    }
+    val color = when (tier) {
+        "must" -> MaterialTheme.colorScheme.onBackground
+        "done" -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = color,
+            fontWeight = if (tier == "must") FontWeight.SemiBold else FontWeight.Medium,
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(
+            count.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun PlanItemCard(
+    item: DailyPlanItem,
+    goal: Goal?,
+    saving: Boolean,
+    onDone: () -> Unit,
+    onLater: () -> Unit,
+    onSkip: () -> Unit,
+    onExplain: () -> Unit,
+    onOpenGoal: () -> Unit,
+) {
+    // Tier-based color treatment per spec §21.2: brightness/saturation
+    // gradient, not red/yellow/green. Must = full color. Should =
+    // dimmed. Could = muted variant.
+    val container = when (item.tier) {
+        "must" -> MaterialTheme.colorScheme.surface
+        "should" -> MaterialTheme.colorScheme.surface
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val accent = when (item.tier) {
+        "must" -> MaterialTheme.colorScheme.primary
+        "should" -> MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Card(
+        onClick = onOpenGoal,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = container),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                item.taskText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Row {
+                Text(
+                    "~${item.estMinutes} min",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = accent,
+                )
+                if (goal != null) {
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "·  for: ${goal.statement}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (item.rationale.isNotBlank()) {
+                Text(
+                    item.rationale,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(
+                    onClick = onDone,
+                    enabled = !saving,
+                    modifier = Modifier.weight(1f),
+                ) { Text(if (saving) "…" else "Done") }
+                OutlinedButton(
+                    onClick = onLater,
+                    enabled = !saving,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Later") }
+                OutlinedButton(
+                    onClick = onSkip,
+                    enabled = !saving,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Skip") }
+                OutlinedButton(
+                    onClick = onExplain,
+                    enabled = !saving,
+                    modifier = Modifier.weight(1.2f),
+                ) { Text("Tell Coach") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FinishedItemRow(item: DailyPlanItem, goal: Goal?) {
+    val label = when (item.state) {
+        "done" -> "✓ Done"
+        "deferred" -> "Later"
+        "declined" -> "Skipped"
+        else -> item.state
+    }
+    Card(
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(
+                item.taskText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textDecoration = if (item.state == "done") TextDecoration.LineThrough else null,
+            )
+            Row {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (goal != null) {
+                    Text(
+                        "  ·  ${goal.statement}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (item.deferReason.isNotBlank()) {
+                Text(
+                    "\"${item.deferReason}\"",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyPlanCard(
+    hasGoals: Boolean,
     onOpenGoals: () -> Unit,
     onOpenChat: () -> Unit,
-    onOpenFocus: () -> Unit,
 ) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            when (mode) {
-                TodayMode.ACTIVE_SESSION -> {
-                    Text(
-                        "Focus session running",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    activeSession?.let {
-                        Text(
-                            "${it.plannedDurationMinutes} min planned · started ${prettyTime(it.startedAt)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    androidx.compose.material3.Button(
-                        onClick = onOpenFocus,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Open session") }
-                }
-                TodayMode.EOD_PENDING -> {
-                    Text(
-                        "End of day check-in",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        "Today's grade is computed but not locked in. Want to review?",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    androidx.compose.material3.Button(
-                        onClick = onOpenChat,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Talk it through with the Coach") }
-                }
-                TodayMode.HAS_TASKS -> {
-                    if (nextTask != null) {
-                        Text(
-                            "Next move",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            nextTask.description,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        if (nextTask.first60Seconds.isNotBlank()) {
-                            Text(
-                                "Start with: ${nextTask.first60Seconds}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        nextTaskGoal?.let {
-                            Text(
-                                "for: ${it.statement}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        androidx.compose.material3.Button(
-                            onClick = onOpenFocus,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Start focus session") }
-                    } else {
-                        // HAS_TASKS but the first task isn't structured
-                        // enough to surface as a "next move" — render a
-                        // gentle prompt instead of an empty card.
-                        Text(
-                            "What's next?",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            "Pick a task below or start a focus session against an active goal.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            androidx.compose.material3.OutlinedButton(
-                                onClick = onOpenGoals,
-                                modifier = Modifier.weight(1f),
-                            ) { Text("Goals") }
-                            androidx.compose.material3.Button(
-                                onClick = onOpenFocus,
-                                modifier = Modifier.weight(1f),
-                            ) { Text("Start focus") }
-                        }
+            Text(
+                if (hasGoals) "No items today." else "No goals yet.",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                if (hasGoals)
+                    "The Coach didn't propose anything for today. That's okay — capture a thought or talk things through."
+                else
+                    "Start by saving a goal. Once you have one, the Coach will plan your days against it.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!hasGoals) {
+                    Button(onClick = onOpenGoals, modifier = Modifier.weight(1f)) {
+                        Text("Goals")
                     }
                 }
-                TodayMode.EMPTY -> {
-                    Text(
-                        "Nothing scheduled",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        "Capture a thought, set a goal, or talk to the Coach.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = onOpenGoals,
-                            modifier = Modifier.weight(1f),
-                        ) { Text("Goals") }
-                        androidx.compose.material3.Button(
-                            onClick = onOpenChat,
-                            modifier = Modifier.weight(1f),
-                        ) { Text("Coach") }
-                    }
+                OutlinedButton(onClick = onOpenChat, modifier = Modifier.weight(1f)) {
+                    Text("Coach")
                 }
-                else -> Unit
             }
-            if (pendingDreams > 0) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "$pendingDreams memory proposal${if (pendingDreams == 1) "" else "s"} waiting in Dreams.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExplainSheet(
+    item: DailyPlanItem,
+    onDismiss: () -> Unit,
+    onDefer: (String) -> Unit,
+    onSkip: (String) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var reason by remember { mutableStateOf("") }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .imePadding()
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Tell Coach why", style = MaterialTheme.typography.titleLarge)
+            Text(
+                item.taskText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = reason,
+                onValueChange = { reason = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Reason") },
+                placeholder = { Text("e.g. I'll do that tomorrow while I'm in OKC") },
+                minLines = 2,
+                maxLines = 5,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = { onDefer(reason.trim()) },
+                    enabled = reason.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) { Text("Defer") }
             }
+            TextButton(
+                onClick = { onSkip(reason.trim()) },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Skip entirely") }
         }
     }
 }
@@ -415,7 +558,7 @@ private fun StreakRibbon(streak: StreakResponse?) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "${streak.currentStreakLength}",
+                text = streak.currentStreakLength.toString(),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
@@ -434,11 +577,6 @@ private fun StreakRibbon(streak: StreakResponse?) {
                 )
             }
         }
-        // Continuous ribbon, not isolated dots. A thin connecting track
-        // with rounded segments per day reads as a chain — and the
-        // ADHD-safe palette (§21.2) means brightness alone signals
-        // state. Zero days are the only true alarm; everything else
-        // sits on a primary-saturation gradient.
         StreakRibbonStrip(history = streak.history.takeLast(28))
     }
 }
@@ -454,7 +592,7 @@ private fun StreakRibbonStrip(history: List<com.buddy.app.data.StreakDay>) {
         modifier = Modifier
             .fillMaxWidth()
             .height(10.dp)
-            .background(track, androidx.compose.foundation.shape.RoundedCornerShape(5.dp)),
+            .background(track, RoundedCornerShape(5.dp)),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -479,68 +617,10 @@ private fun StreakRibbonStrip(history: List<com.buddy.app.data.StreakDay>) {
     }
 }
 
-@Composable
-private fun TodayTaskRow(
-    task: Task,
-    goalLabel: String?,
-    onToggle: () -> Unit,
-    onClick: () -> Unit,
-) {
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(checked = task.state == "done", onCheckedChange = { onToggle() })
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    task.description,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textDecoration = if (task.state == "done") TextDecoration.LineThrough else null,
-                )
-                if (!goalLabel.isNullOrBlank()) {
-                    Text(
-                        goalLabel,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            task.estimatedDurationMinutes?.let {
-                Text(
-                    "${it}m",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
 private fun paceLabel(score: Double?): String = when {
     score == null -> "no data yet"
     score >= 1.5 -> "well above pace"
     score >= 1.0 -> "on pace"
     score > 0.0 -> "below pace"
     else -> "no progress yet"
-}
-
-private fun prettyTime(iso: String): String = try {
-    val instant = if (iso.endsWith("Z") || iso.contains("+")) {
-        java.time.OffsetDateTime.parse(iso).toInstant()
-    } else {
-        java.time.LocalDateTime.parse(iso).toInstant(java.time.ZoneOffset.UTC)
-    }
-    java.time.ZonedDateTime.ofInstant(instant, java.time.ZoneId.systemDefault())
-        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
-} catch (_: Exception) {
-    iso
 }

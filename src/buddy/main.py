@@ -16,6 +16,7 @@ from buddy.api import blocks as blocks_api
 from buddy.api import capture as capture_api
 from buddy.api import conversations as conversations_api
 from buddy.api import converse as converse_api
+from buddy.api import daily_plan as daily_plan_api
 from buddy.api import focus as focus_api
 from buddy.api import goal_planner as goal_planner_api
 from buddy.api import goals as goals_api
@@ -259,6 +260,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks_nl_api.router)
     app.include_router(progress_api.router)
     app.include_router(grade_api.router)
+    app.include_router(daily_plan_api.router)
     app.include_router(journal_api.router)
     # Phase 3 routes.
     app.include_router(capture_api.router)
