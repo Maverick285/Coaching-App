@@ -134,7 +134,21 @@ async def converse(req: ConverseRequest) -> ConverseResponse:
     # progress against an existing goal, or do both. We auto-execute
     # the low-stakes ones (log_progress) and surface the high-stakes
     # ones (propose_goal) as confirmable cards.
-    chat_tools = [PROPOSE_GOAL_INLINE_TOOL, LOG_PROGRESS_INLINE_TOOL]
+    #
+    # Web search is Anthropic's server-side tool: the model calls it
+    # itself, gets results back from Anthropic's infra, and folds them
+    # into its response. There's no client-side handler — our existing
+    # tool-block parser only looks for `tool_use` blocks (not
+    # `server_tool_use`), so adding it is transparent.
+    chat_tools: list[dict] = [PROPOSE_GOAL_INLINE_TOOL, LOG_PROGRESS_INLINE_TOOL]
+    if settings.enable_web_search:
+        chat_tools.append(
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": max(1, min(settings.web_search_max_uses_per_turn, 10)),
+            }
+        )
     try:
         tool_result = await chat_with_optional_tools(
             model=model,

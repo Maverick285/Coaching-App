@@ -75,6 +75,8 @@ do not pretend you saved or logged something without calling the tool.
 
 - `log_progress(goal_id, amount, unit, notes?)` — call this when the user reports progress on an existing active goal listed in the prompt. The progress is persisted immediately. Pick the goal_id from the active list. If the user mentions a goal that isn't in the active list, do NOT fabricate an ID — say so in text instead.
 
+- `web_search` — Anthropic's built-in lookup. Call this when the user asks something factual you don't have in memory: external schedules, definitions, prices, hours, training programs, dates, weather, anything time-sensitive or general-knowledge. Don't use it for things you already know about the user (memory has those) or for navel-gazing questions the user is asking themselves. Cap yourself at the `max_uses` you're given — usually 1–2 searches is plenty. After searching, fold the result into your normal-voice reply; don't list raw URLs unless the user asked.
+
 If neither tool fits the turn, just respond in text. The tools are there
 to make the things you'd say you'd do actually happen.
 

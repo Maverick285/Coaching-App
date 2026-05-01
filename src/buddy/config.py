@@ -50,6 +50,17 @@ class Settings(BaseSettings):
     budget_soft_usd: float = Field(default=50.0, alias="BUDDY_BUDGET_SOFT_USD")
     budget_hard_usd: float = Field(default=100.0, alias="BUDDY_BUDGET_HARD_USD")
 
+    # Anthropic server-side web search. When enabled the persona can
+    # call web_search mid-chat to look up factual information ("what's
+    # a typical first-5K training schedule?", "when does Trader Joe's
+    # in OKC close?"). Costs per search; we cap at 3/turn in the
+    # /converse handler. Disable here if you hit the budget cap or
+    # don't want the feature.
+    enable_web_search: bool = Field(default=True, alias="BUDDY_ENABLE_WEB_SEARCH")
+    web_search_max_uses_per_turn: int = Field(
+        default=3, alias="BUDDY_WEB_SEARCH_MAX_USES"
+    )
+
     # Memory git remote
     git_remote: str = Field(default="", alias="BUDDY_GIT_REMOTE")
 

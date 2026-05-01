@@ -96,6 +96,12 @@ fun FocusScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Quick explainer card — shows above the active/start
+            // section when no session is running. Many users don't
+            // know what a "focus session" is or why the app has it.
+            if (state.active == null) {
+                item { WhatIsAFocusSessionCard() }
+            }
             item {
                 if (state.active != null) {
                     ActiveSessionCard(
@@ -331,4 +337,44 @@ private fun formatTimeOnly(iso: String): String = try {
     OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("HH:mm"))
 } catch (_: Exception) {
     iso
+}
+
+
+/**
+ * Plain-English explainer of what a focus session is + why the app
+ * has one. Sits above the start-session card on first visit so the
+ * user isn't staring at "Start session" with no context.
+ *
+ * Body-doubling research summary in user's voice. Master spec §16.
+ */
+@Composable
+private fun WhatIsAFocusSessionCard() {
+    androidx.compose.material3.Card(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                "What's a focus session?",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "A timed block where you tell the Coach what you're working on. While it's running, the time you put in counts as progress against the goal you picked, and the Coach watches for drift — if you start scrolling instead of working, you'll get a nudge. Useful when you can't get started or want company on a hard task.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Drift detection needs accessibility access (grant from Customize). Without it the session is essentially a timer — still useful, just less active.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
