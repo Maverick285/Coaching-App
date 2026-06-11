@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="6dp">
+
+    <Button
+        android:id="@+id/widget_button"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/widget_capture_bg"
+        android:text="@string/widget_capture_label"
+        android:textColor="#E9E3D6"
+        android:textSize="14sp"
+        android:textAllCaps="false"
+        android:textStyle="normal"
+        android:fontFamily="serif"
+        android:drawableTop="@drawable/ic_widget_mic"
+        android:drawablePadding="6dp"
+        android:gravity="center"
+        android:padding="12dp" />
+</FrameLayout>

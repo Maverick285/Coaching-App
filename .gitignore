@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Local secrets
+.env
+.env.local
+
+# Local runtime data (memory + index live under /data in production)
+# Anchored to project root only — don't accidentally ignore Kotlin `data/` packages.
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Caddy state
+caddy_data/
+caddy_config/

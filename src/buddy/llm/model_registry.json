@@ -1,0 +1,28 @@
+{
+  "tiers": {
+    "fast": {
+      "current": "claude-sonnet-4-6",
+      "fallback": "claude-sonnet-4-5",
+      "notes": "Updated 2026-04-27. Default conversational tier — Sonnet 4.6."
+    },
+    "reasoning": {
+      "current": "claude-opus-4-7",
+      "fallback": "claude-opus-4-6",
+      "notes": "Updated 2026-04-26. Used for planning, intake, consolidation, introspection."
+    }
+  },
+  "embedding": {
+    "current": "text-embedding-3-small",
+    "dimensions": 1536,
+    "notes": "OpenAI; cost is tiny at personal-use volume."
+  },
+  "pricing_usd_per_million_tokens": {
+    "claude-sonnet-4-6":          { "input": 3.00, "output": 15.00 },
+    "claude-sonnet-4-5":          { "input": 3.00, "output": 15.00 },
+    "claude-haiku-4-5-20251001":  { "input": 1.00, "output": 5.00 },
+    "claude-haiku-4-5":           { "input": 1.00, "output": 5.00 },
+    "claude-opus-4-7":            { "input": 15.00, "output": 75.00 },
+    "claude-opus-4-6":            { "input": 15.00, "output": 75.00 },
+    "text-embedding-3-small":     { "input": 0.02, "output": 0.00 }
+  }
+}

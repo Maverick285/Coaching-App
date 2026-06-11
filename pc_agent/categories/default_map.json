@@ -1,0 +1,97 @@
+{
+  "_note": "Maps lowercased process / executable name → canonical category. The category set must match KNOWN_CATEGORIES in src/buddy/schemas_phase4.py. Add entries for whatever apps you actually use; missing apps default to 'other' until you categorize them.",
+
+  "code_editor": [
+    "code", "code.exe", "code - insiders", "code-insiders", "vscodium",
+    "idea", "idea64.exe", "pycharm", "pycharm64.exe", "webstorm", "goland",
+    "rubymine", "clion", "datagrip", "androidstudio", "studio64.exe",
+    "sublime_text", "sublime_text.exe", "subl",
+    "atom", "atom.exe",
+    "nvim", "vim", "gvim", "emacs",
+    "xcode", "fleet", "zed", "cursor"
+  ],
+
+  "terminal": [
+    "wezterm", "wezterm-gui", "alacritty", "kitty", "tabby",
+    "windowsterminal", "windowsterminal.exe",
+    "powershell", "powershell.exe", "pwsh", "pwsh.exe",
+    "cmd", "cmd.exe",
+    "iterm", "iterm2", "terminal", "gnome-terminal", "konsole",
+    "tmux", "screen"
+  ],
+
+  "browser": [
+    "chrome", "chrome.exe", "google chrome",
+    "firefox", "firefox.exe",
+    "msedge", "msedge.exe", "microsoft edge",
+    "safari", "brave", "brave-browser",
+    "opera", "opera.exe", "vivaldi", "arc"
+  ],
+
+  "spreadsheet": [
+    "excel", "excel.exe",
+    "soffice.bin", "soffice.exe",
+    "numbers", "gnumeric"
+  ],
+
+  "document": [
+    "winword", "winword.exe", "word",
+    "writer", "libreoffice", "openoffice",
+    "pages", "scrivener", "ulysses", "obsidian", "obsidian.exe",
+    "notion", "notion.exe", "logseq", "typora", "marktext"
+  ],
+
+  "pdf": [
+    "acrord32", "acrord32.exe", "adobe acrobat", "acrobat.exe",
+    "preview", "okular", "evince", "foxitreader", "foxit reader",
+    "skim", "sumatrapdf"
+  ],
+
+  "communication": [
+    "slack", "slack.exe",
+    "discord", "discord.exe",
+    "teams", "ms-teams.exe", "teams.exe",
+    "zoom", "zoom.exe",
+    "outlook", "outlook.exe",
+    "thunderbird", "mailmate", "mail", "spark",
+    "telegram", "telegram.exe", "whatsapp", "whatsapp.exe",
+    "signal", "signal.exe"
+  ],
+
+  "social_media": [
+    "tweetdeck", "twitterrific",
+    "reddit", "reddit.exe",
+    "instagram"
+  ],
+
+  "video": [
+    "vlc", "vlc.exe",
+    "mpv", "quicktime", "quicktime player",
+    "youtube",
+    "netflix", "netflix.exe",
+    "primevideo", "disney+", "hulu",
+    "twitch", "twitch.exe"
+  ],
+
+  "music": [
+    "spotify", "spotify.exe",
+    "music", "itunes", "apple music",
+    "tidal", "tidal.exe",
+    "rhythmbox", "audacious", "foobar2000"
+  ],
+
+  "gaming": [
+    "steam", "steam.exe",
+    "epicgameslauncher", "epicgameslauncher.exe",
+    "battle.net", "battlenet.exe",
+    "leagueoflegends", "league of legends",
+    "minecraft", "minecraft.exe", "javaw"
+  ],
+
+  "system": [
+    "explorer", "explorer.exe",
+    "finder", "system settings", "systempreferences",
+    "nautilus", "dolphin", "thunar",
+    "settings", "controlpanel"
+  ]
+}

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Buddy</string>
+
+    <string name="title_chat">Buddy</string>
+    <string name="title_settings">Settings</string>
+
+    <string name="hint_message">Message</string>
+    <string name="action_send">Send</string>
+    <string name="action_voice">Hold to talk</string>
+    <string name="action_new_session">New conversation</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_save">Save</string>
+    <string name="action_test_connection">Test connection</string>
+
+    <string name="label_backend_url">Backend URL</string>
+    <string name="label_auth_token">Auth token</string>
+    <string name="hint_backend_url">https://buddy.example.com</string>
+    <string name="hint_auth_token">Bearer token from your .env</string>
+
+    <string name="msg_settings_required">Set the backend URL and auth token in Settings before chatting.</string>
+    <string name="msg_listening">Listening…</string>
+    <string name="msg_voice_unavailable">Voice recognition isn\'t available on this device.</string>
+    <string name="msg_record_audio_required">Microphone permission is required for voice input.</string>
+    <string name="msg_connection_ok">Connection OK · models: %1$s</string>
+    <string name="msg_connection_failed">Connection failed: %1$s</string>
+
+    <string name="label_morning_time">Morning check-in</string>
+    <string name="label_eod_time">End-of-day grade</string>
+    <string name="label_alarms_enabled">Daily prompts</string>
+    <string name="msg_notifications_required">Allow notifications to receive morning and end-of-day prompts.</string>
+
+    <!-- Phase 3: capture + focus -->
+    <string name="widget_capture_label">Capture</string>
+    <string name="widget_capture_description">Tap to dictate to Buddy.</string>
+    <string name="title_focus">Focus</string>
+    <string name="action_start_focus">Start session</string>
+    <string name="action_end_focus">End session</string>
+    <string name="hint_focus_intention">e.g. 45 minutes on the runsheet</string>
+
+    <!-- Phase 5: accessibility service description shown in the system permission grant screen -->
+    <string name="accessibility_service_description">Buddy needs accessibility access only to detect which app is foregrounded during a focus session, so it can render the friction pause or hard-block screens you configured. It does NOT read screen content, log keystrokes, or capture text. The grant is required only for Tier 3 / Tier 4 interventions; lower tiers work without it.</string>
+    <string name="accessibility_service_summary">Renders friction overlay + hard-block redirect during focus sessions.</string>
+</resources>

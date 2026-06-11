@@ -1,0 +1,550 @@
+"""Typed tool schemas for Anthropic native structured outputs.
+
+Per master spec §44: every place AI output becomes action goes through a
+typed tool definition. Schema-violation rate on this path is <0.2% vs.
+5-12% for prompt-engineered JSON. No regex parsing of model responses —
+ever. The application validates against these schemas; if input is
+invalid the call retries once with the validation error in-prompt; if it
+fails again we fall back to the deterministic local renderer where one
+exists, or to ask_user as a final escape hatch.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+# --- Persona intake synthesis ----------------------------------------------
+
+SYNTHESIZE_PERSONA_TOOL: dict[str, Any] = {
+    "name": "synthesize_persona",
+    "description": (
+        "Produce the user's full PERSONA.md and MEMORY.md from their "
+        "structured intake answers, plus the chosen persona name."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "persona_md": {
+                "type": "string",
+                "description": "Full markdown contents of PERSONA.md.",
+            },
+            "memory_md": {
+                "type": "string",
+                "description": "Full markdown contents of MEMORY.md.",
+            },
+            "persona_name": {
+                "type": "string",
+                "description": (
+                    "What the user said to call THE COACH. Default to "
+                    "'Coach' if the user didn't provide one. Never put "
+                    "the user's own name here — that's a separate field."
+                ),
+            },
+        },
+        "required": ["persona_md", "memory_md", "persona_name"],
+    },
+}
+
+
+# --- WOOP synthesis ---------------------------------------------------------
+
+PROPOSE_WOOP_PLAN_TOOL: dict[str, Any] = {
+    "name": "propose_woop_plan",
+    "description": (
+        "Run the WOOP planning protocol on the user's wish and return a "
+        "complete structured plan: outcome, obstacles, if-then plans, "
+        "first-step tasks, and a daily pace target."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "wish": {"type": "string"},
+            "outcome": {
+                "type": "string",
+                "description": "2-4 sentences, vivid near-feel of success.",
+            },
+            "obstacles": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "1-3 concrete obstacles in current reality. Specific "
+                    "times/contexts/failure modes. Not 'being lazy'."
+                ),
+            },
+            "plan": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "1-4 if-then statements addressing obstacles.",
+            },
+            "suggested_intentions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "cue_type": {
+                            "type": "string",
+                            "enum": ["time_place", "routine", "event", "obstacle"],
+                        },
+                        "cue_text": {"type": "string"},
+                        "response_text": {"type": "string"},
+                    },
+                    "required": ["cue_type", "cue_text", "response_text"],
+                },
+                "description": (
+                    "2-4 implementation intentions; at least one with "
+                    "cue_type=obstacle."
+                ),
+            },
+            "suggested_tasks": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "3-6 first-step tasks, smallest first; each should "
+                    "have an under-60-second start."
+                ),
+            },
+            "suggested_pace_unit": {
+                "type": "string",
+                "description": "e.g. pages, minutes, sessions, lbs/week.",
+            },
+            "suggested_pace_amount": {"type": "number"},
+            "suggested_pace_description": {
+                "type": "string",
+                "description": "1 sentence describing what par 1.0 looks like.",
+            },
+        },
+        "required": [
+            "wish",
+            "outcome",
+            "obstacles",
+            "plan",
+            "suggested_intentions",
+            "suggested_tasks",
+            "suggested_pace_unit",
+            "suggested_pace_amount",
+            "suggested_pace_description",
+        ],
+    },
+}
+
+
+# --- Goal planner -----------------------------------------------------------
+
+PROPOSE_GOAL_PLAN_TOOL: dict[str, Any] = {
+    "name": "propose_goal_plan",
+    "description": (
+        "Convert a one-line wish + optional deadline into a complete goal "
+        "plan covering pace target, no-zero floor, intervention ceiling, "
+        "milestones, first-week tasks with 60-second starters, and "
+        "if-then implementation intentions."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "statement": {
+                "type": "string",
+                "description": "Crisp restatement, ≤80 chars, the user's voice.",
+            },
+            "rationale": {"type": "string"},
+            "user_facing_summary": {
+                "type": "string",
+                "description": "1-3 sentences for the wizard review screen.",
+            },
+            "pace_target_unit": {"type": "string"},
+            "pace_target_amount": {"type": "number"},
+            "pace_target_description": {"type": "string"},
+            "mvp_threshold": {
+                "type": "string",
+                "description": "Smallest action that still counts as a 1.",
+            },
+            "intervention_ceiling": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4,
+            },
+            "approach": {
+                "type": "string",
+                "enum": ["user_driven", "hybrid", "system_assisted"],
+            },
+            "priority": {"type": "integer", "minimum": 1, "maximum": 5},
+            "milestones": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "statement": {"type": "string"},
+                        "deadline": {"type": ["string", "null"]},
+                        "pace_target_unit": {"type": "string"},
+                        "pace_target_amount": {"type": "number"},
+                        "mvp_threshold": {"type": "string"},
+                    },
+                    "required": [
+                        "statement",
+                        "pace_target_unit",
+                        "pace_target_amount",
+                        "mvp_threshold",
+                    ],
+                },
+            },
+            "first_week_tasks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "description": {"type": "string"},
+                        "estimated_duration_minutes": {
+                            "type": ["integer", "null"],
+                        },
+                        "first_60_seconds": {"type": "string"},
+                        "scheduled_at": {"type": ["string", "null"]},
+                    },
+                    "required": ["description", "first_60_seconds"],
+                },
+            },
+            "implementation_intentions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "cue_type": {
+                            "type": "string",
+                            "enum": ["time_place", "routine", "event", "obstacle"],
+                        },
+                        "cue_text": {"type": "string"},
+                        "response_text": {"type": "string"},
+                    },
+                    "required": ["cue_type", "cue_text", "response_text"],
+                },
+            },
+            "obstacles": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "outcome_vision": {"type": "string"},
+        },
+        "required": [
+            "statement",
+            "user_facing_summary",
+            "pace_target_unit",
+            "pace_target_amount",
+            "mvp_threshold",
+            "intervention_ceiling",
+            "approach",
+            "priority",
+            "milestones",
+            "first_week_tasks",
+            "implementation_intentions",
+            "obstacles",
+            "outcome_vision",
+        ],
+    },
+}
+
+
+# --- Progress attribution ---------------------------------------------------
+
+ATTRIBUTE_PROGRESS_TOOL: dict[str, Any] = {
+    "name": "attribute_progress",
+    "description": (
+        "Map a free-form progress log line to one or more active goals "
+        "with units and confidence."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "attributions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "goal_id": {"type": "integer"},
+                        "units": {"type": "number"},
+                        "unit_label": {"type": "string"},
+                        "confidence": {
+                            "type": "number",
+                            "minimum": 0.0,
+                            "maximum": 1.0,
+                        },
+                        "rationale": {"type": "string"},
+                    },
+                    "required": [
+                        "goal_id",
+                        "units",
+                        "unit_label",
+                        "confidence",
+                        "rationale",
+                    ],
+                },
+            },
+            "unattributed_text": {"type": "string"},
+        },
+        "required": ["attributions", "unattributed_text"],
+    },
+}
+
+
+# --- Capture classification -------------------------------------------------
+
+CLASSIFY_CAPTURE_TOOL: dict[str, Any] = {
+    "name": "classify_capture",
+    "description": (
+        "Interpret a voice or text capture and propose 0+ concrete "
+        "actions for the user to confirm."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "actions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "enum": [
+                                "log_progress",
+                                "create_task",
+                                "journal_entry",
+                                "schedule_focus",
+                                "create_goal",
+                                "note",
+                            ],
+                        },
+                        "summary": {"type": "string"},
+                        "payload": {
+                            "type": "object",
+                            "description": "Kind-specific arguments.",
+                        },
+                    },
+                    "required": ["kind", "summary"],
+                },
+            },
+            "fallback_message": {"type": "string"},
+        },
+        "required": ["actions", "fallback_message"],
+    },
+}
+
+
+# --- In-chat actions --------------------------------------------------------
+#
+# These are the tool surfaces the persona can call from /converse during
+# a normal back-and-forth (master spec §47). Differ from the synthesis
+# tools above in two ways:
+#   1. Schemas are looser — the user can refine details after.
+#   2. Each one has a stakes level the API layer reads to decide
+#      whether to auto-execute or surface as a proposal card.
+
+PROPOSE_GOAL_INLINE_TOOL: dict[str, Any] = {
+    "name": "propose_goal",
+    "description": (
+        "Propose creating a new goal for the user to confirm. Call this "
+        "when the user clearly intends to commit to or track something "
+        "new ('I want to read 24 books this year', 'help me lose 10 lbs'). "
+        "Do NOT call it for casual mentions or hypotheticals. The user "
+        "will see a card with the proposed goal and tap to save."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "statement": {
+                "type": "string",
+                "description": (
+                    "Crisp restatement of the goal in the user's voice, "
+                    "≤80 chars. e.g. 'Read 24 books this year' not "
+                    "'The user wants to read more books'."
+                ),
+            },
+            "rationale": {
+                "type": "string",
+                "description": "1 sentence on why this matters.",
+            },
+            "priority": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5,
+                "description": "1=low, 3=medium, 5=top. Default 3.",
+            },
+            "deadline": {
+                "type": ["string", "null"],
+                "description": "ISO date (YYYY-MM-DD) or null for open-ended.",
+            },
+            "pace_target_amount": {"type": "number"},
+            "pace_target_unit": {
+                "type": "string",
+                "description": "e.g. 'pages', 'minutes', 'lbs/week'.",
+            },
+            "mvp_threshold": {
+                "type": "string",
+                "description": (
+                    "Smallest action that still counts as a 1, e.g. "
+                    "'5 pages', '10-min walk'."
+                ),
+            },
+        },
+        "required": ["statement", "rationale"],
+    },
+}
+
+
+LOG_PROGRESS_INLINE_TOOL: dict[str, Any] = {
+    "name": "log_progress",
+    "description": (
+        "Log progress toward an existing active goal. Use this when the "
+        "user reports having done something tied to a known goal: 'read "
+        "30 pages today', 'finished the runsheet'. The progress is "
+        "recorded immediately — don't propose, just log. Pick the goal "
+        "from the active list provided in the system prompt."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "goal_id": {"type": "integer"},
+            "amount": {"type": "number"},
+            "unit": {"type": "string"},
+            "notes": {"type": "string"},
+        },
+        "required": ["goal_id", "amount", "unit"],
+    },
+}
+
+
+PROPOSE_CONSOLIDATION_TOOL: dict[str, Any] = {
+    "name": "propose_consolidation",
+    "description": (
+        "Produce the nightly consolidation output: a day summary plus "
+        "tiered memory updates (auto-apply vs require-review)."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "day_summary": {"type": "string"},
+            "auto_apply": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string"},
+                        "target_path": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "content": {"type": "string"},
+                        "rationale": {"type": "string"},
+                    },
+                    "required": ["kind", "target_path", "summary", "content"],
+                },
+            },
+            "review": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string"},
+                        "target_path": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "content": {"type": "string"},
+                        "rationale": {"type": "string"},
+                    },
+                    "required": ["kind", "target_path", "summary", "content"],
+                },
+            },
+        },
+        "required": ["day_summary", "auto_apply", "review"],
+    },
+}
+
+
+# --- Daily plan -------------------------------------------------------------
+
+GENERATE_DAILY_PLAN_TOOL: dict[str, Any] = {
+    "name": "generate_daily_plan",
+    "description": (
+        "Build today's plan as a list of tiered, goal-derived tasks. "
+        "STRICT RULES: every task must trace to one of the active "
+        "goals provided in the prompt by goal_id. Do NOT include life "
+        "admin (eating, sleeping, hygiene, errands). Do NOT propose "
+        "anything that the user hasn't already committed to via a "
+        "saved goal. Tier each task: 'must' (skipping breaks the "
+        "day), 'should' (target pace), 'could' (stretch / if time). "
+        "Estimates are honest minutes — under-estimate is worse than "
+        "over."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "rationale": {
+                "type": "string",
+                "description": (
+                    "1-3 sentences for the user explaining the shape "
+                    "of today's plan. Plain English, the persona's "
+                    "voice."
+                ),
+            },
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "goal_id": {
+                            "type": "integer",
+                            "description": "Must match one of the active goal IDs.",
+                        },
+                        "task_text": {
+                            "type": "string",
+                            "description": (
+                                "Concrete, action-first phrasing. "
+                                "'Read 30 pages of Thinking Fast and "
+                                "Slow' not 'reading'."
+                            ),
+                        },
+                        "tier": {
+                            "type": "string",
+                            "enum": ["must", "should", "could"],
+                        },
+                        "est_minutes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 480,
+                        },
+                        "rationale": {
+                            "type": "string",
+                            "description": "1 line on why this slot.",
+                        },
+                    },
+                    "required": ["goal_id", "task_text", "tier", "est_minutes"],
+                },
+            },
+        },
+        "required": ["rationale", "items"],
+    },
+}
+
+
+PARSE_DEFERRAL_TOOL: dict[str, Any] = {
+    "name": "parse_deferral_reason",
+    "description": (
+        "Read a free-text deferral reason from the user (e.g. \"I'll "
+        "do that tomorrow while I'm in OKC\") and extract any explicit "
+        "or implicit defer-until date plus the contextual note. If "
+        "the user gave no specific date, return defer_until_iso=null "
+        "and let context speak for itself."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "defer_until_iso": {
+                "type": ["string", "null"],
+                "description": "YYYY-MM-DD or null if no specific date.",
+            },
+            "context_note": {
+                "type": "string",
+                "description": (
+                    "Short summary of WHY, in third-person. The "
+                    "Coach uses this on future days to avoid "
+                    "re-proposing the same task in the same window."
+                ),
+            },
+        },
+        "required": ["context_note"],
+    },
+}
